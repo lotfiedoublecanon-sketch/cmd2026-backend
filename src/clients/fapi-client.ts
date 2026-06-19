@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import {
   NormalizedMatch, MatchEvent, TimelineEventType,
   MatchStats, StatCategory, MatchLineups, LineupPlayer,
-  TeamInfo, MatchStatus, MatchPeriod
+  TeamInfo, MatchStatus, MatchPeriod, StandingEntry
 } from '../types';
 import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
@@ -138,12 +138,12 @@ class FapiClient {
 
   // ---- Standings ----
 
-  async getStandings(): Promise<any> {
+  async getStandings(): Promise<StandingEntry[]> {
     try {
       const data = await this.request<any>('GET', `/competitions/${FAPI_COMPETITION_ID}/standings`, undefined, 120);
-      return data;
+      return this.normalizeStandings(data);
     } catch {
-      return null;
+      return [];
     }
   }
 
@@ -359,6 +359,65 @@ class FapiClient {
       isStarter: p.is_starter ?? p.isStarter ?? p.starting ?? true,
       rating: p.rating ?? p.match_rating ?? undefined,
     }));
+  }
+
+  private normalizeStandings(raw: any): StandingEntry[] {
+    const items = this.extractStandingItems(raw);
+    return items.map((entry, index) => this.normalizeStandingEntry(entry, index + 1));
+  }
+
+  private extractStandingItems(raw: any): any[] {
+    const candidates = [
+      raw?.data,
+      raw?.standings,
+      raw?.table,
+      raw?.results,
+      raw?.data?.standings,
+      raw?.data?.table,
+      raw?.data?.results,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return this.flattenStandingGroups(candidate);
+    }
+
+    return [];
+  }
+
+  private flattenStandingGroups(items: any[]): any[] {
+    return items.flatMap((item) => {
+      const groupRows = item?.standings || item?.table || item?.teams || item?.rows;
+      if (Array.isArray(groupRows)) {
+        return groupRows.map((row: any) => ({
+          ...row,
+          group: row.group || row.group_name || item.group || item.group_name || item.name,
+        }));
+      }
+      return item;
+    });
+  }
+
+  private normalizeStandingEntry(raw: any, position: number): StandingEntry {
+    const team = this.normalizeTeam(raw.team || raw.team_info || raw);
+    return {
+      position: this.toNumber(raw.position ?? raw.rank ?? raw.pos, position),
+      team,
+      played: this.toNumber(raw.played ?? raw.matches_played ?? raw.games ?? raw.p, 0),
+      won: this.toNumber(raw.won ?? raw.wins ?? raw.w, 0),
+      drawn: this.toNumber(raw.drawn ?? raw.draws ?? raw.d, 0),
+      lost: this.toNumber(raw.lost ?? raw.losses ?? raw.l, 0),
+      goalsFor: this.toNumber(raw.goals_for ?? raw.goalsFor ?? raw.gf, 0),
+      goalsAgainst: this.toNumber(raw.goals_against ?? raw.goalsAgainst ?? raw.ga, 0),
+      goalDifference: this.toNumber(raw.goal_difference ?? raw.goalDifference ?? raw.gd, 0),
+      points: this.toNumber(raw.points ?? raw.pts, 0),
+      group: raw.group || raw.group_name || raw.standing_group || undefined,
+      form: raw.form || undefined,
+    };
+  }
+
+  private toNumber(value: any, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 }
 

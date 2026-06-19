@@ -183,7 +183,7 @@ class MergeService {
   async getStandings(): Promise<ApiResponse<StandingEntry[]>> {
     try {
       const data = await fapiClient.getStandings();
-      if (data) return { success: true, data: data as any, source: 'fapi' };
+      if (data.length > 0) return { success: true, data, source: 'fapi' };
     } catch (e) {
       console.warn('[Merge] FAPI standings failed:', (e as Error).message);
     }

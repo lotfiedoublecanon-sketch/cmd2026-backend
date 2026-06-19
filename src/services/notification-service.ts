@@ -67,7 +67,7 @@ class NotificationService {
    */
   registerToken(token: string): void {
     this.tokens.add(token);
-    console.log(`[FCM] Token registered: ${token.substring(0, 20)}... (${this.tokens.size} total)`);
+    console.log(`[FCM] Token registered (${this.tokens.size} total)`);
   }
 
   /**
@@ -75,7 +75,7 @@ class NotificationService {
    */
   unregisterToken(token: string): void {
     this.tokens.delete(token);
-    console.log(`[FCM] Token unregistered: ${token.substring(0, 20)}... (${this.tokens.size} total)`);
+    console.log(`[FCM] Token unregistered (${this.tokens.size} total)`);
   }
 
   /**
