@@ -32,19 +32,19 @@ npm start
 À tester après push GitHub / redeploy Render :
 
 ```bash
-GET https://cmd2026-backend-1.onrender.com/health
-GET https://cmd2026-backend-1.onrender.com/diagnostic
-GET https://cmd2026-backend-1.onrender.com/matches/live
-GET https://cmd2026-backend-1.onrender.com/matches/today
-GET https://cmd2026-backend-1.onrender.com/matches/upcoming?days=30
-GET https://cmd2026-backend-1.onrender.com/matches/standings
-GET https://cmd2026-backend-1.onrender.com/ai/agents
-POST https://cmd2026-backend-1.onrender.com/ai/chat
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/health
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/diagnostic
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/matches/live
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/matches/today
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/matches/upcoming?days=30
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/matches/standings
+GET https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/ai/agents
+POST https://URL_RENDER_PUBLIQUE_FONCTIONNELLE/ai/chat
 ```
 
 ## Attention
 Ce ZIP backend ne met pas automatiquement à jour l'APK Android. Après backend OK, il faut recompiler l'APK Android avec :
 
 ```bash
-./gradlew clean assembleDebug -PBACKEND_URL=https://cmd2026-backend-1.onrender.com
+./gradlew clean assembleDebug -PBACKEND_URL=https://URL_RENDER_PUBLIQUE_FONCTIONNELLE
 ```

@@ -51,7 +51,7 @@ router.post('/unregister', async (req: Request, res: Response) => {
 router.get('/tokens', async (req: Request, res: Response) => {
   try {
     const tokens = notificationService.getRegisteredTokens();
-    res.json({ success: true, count: tokens.length, tokens: tokens.map(t => t.substring(0, 20) + '...') });
+    res.json({ success: true, count: tokens.length });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
