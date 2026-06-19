@@ -1,0 +1,89 @@
+﻿services:
+  - type: web
+    name: cmd2026-backend
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: PUBLIC_BACKEND_URL
+        sync: false
+      - key: FAPI_API_KEY
+        sync: false
+      - key: THESTATSAPI_KEY
+        sync: false
+      - key: FAPI_BASE_URL
+        value: https://api.thestatsapi.com/v2
+      - key: THESTATSAPI_BASE_URL
+        value: https://api.thestatsapi.com/v2
+      - key: FAPI_COMPETITION_ID
+        sync: false
+      - key: WORLD_CUP_COMPETITION_ID
+        sync: false
+      - key: FAPI_TIMEOUT_MS
+        value: "8000"
+      - key: SPORTDB_API_KEY
+        sync: false
+      - key: SPORTDB_BASE_URL
+        value: https://www.thesportsdb.com/api/v1/json
+      - key: SPORTDB_LEAGUE_ID
+        sync: false
+      - key: SPORTDB_TIMEOUT_MS
+        value: "8000"
+      - key: FLASHSCORE_RAPIDAPI_KEY
+        sync: false
+      - key: FLASHSCORE_RAPIDAPI_HOST
+        sync: false
+      - key: FLASHSCORE_RAPIDAPI_BASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: GEMINI_ENABLE_AGENTS
+        value: "true"
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: FCM_ENABLED
+        value: "true"
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: ENABLE_YOUTUBE
+        value: "true"
+      - key: ENABLE_RSS
+        value: "true"
+      - key: FIFA_RSS_URL
+        value: https://www.fifa.com/fifaplus/en/rss
+      - key: FIFA_YOUTUBE_CHANNEL_ID
+        sync: false
+      - key: FAF_OFFICIAL_URL
+        value: https://www.faf.dz
+      - key: FAF_YOUTUBE_CHANNEL_ID
+        sync: false
+      - key: LIVE_POLL_INTERVAL_SECONDS
+        value: "15"
+      - key: TODAY_POLL_INTERVAL_SECONDS
+        value: "60"
+      - key: UPCOMING_CACHE_SECONDS
+        value: "300"
+      - key: TEAM_CACHE_SECONDS
+        value: "3600"
+      - key: MEDIA_CACHE_SECONDS
+        value: "600"
+      - key: NOTIFICATION_DEDUP_TTL_SECONDS
+        value: "300"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "300"
+      - key: LOG_LEVEL
+        value: info
+      - key: HIDE_SECRETS_IN_LOGS
+        value: "true"
