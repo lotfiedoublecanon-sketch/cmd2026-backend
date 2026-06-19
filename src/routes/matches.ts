@@ -3,7 +3,7 @@
 // ============================================
 import { Router, Request, Response } from 'express';
 import { mergeService } from '../services/merge-service';
-import { geminiService } from '../services/gemini-service';
+import { agentOrchestrator } from '../services/agent-orchestrator-service';
 import { ApiResponse, NormalizedMatch, MatchEvent, MatchStats, MatchLineups } from '../types';
 
 const router = Router();
@@ -205,10 +205,17 @@ router.get('/:id/lineups', async (req: Request, res: Response) => {
 router.get('/:id/commentary', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateLiveCommentary(matchContext, 'Mise a jour du match', req.params.id);
+    const result = await agentOrchestrator.runAgent('Commentateur', {
+      event: 'Mise a jour du match',
+      matchContext,
+      matchId: req.params.id,
+    });
     res.json({
       matchId: req.params.id,
       items: [{ minute: 0, text: result.content }],
+      agent: result.agent,
+      geminiAvailable: result.geminiAvailable,
+      sources: result.sources,
     });
   } catch (error) {
     res.status(500).json({ matchId: req.params.id, items: [], error: (error as Error).message });
@@ -218,12 +225,15 @@ router.get('/:id/commentary', async (req: Request, res: Response) => {
 router.get('/:id/analysis', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateAnalysis(matchContext, req.params.id);
+    const result = await agentOrchestrator.runAgent('Analyste', { matchContext, matchId: req.params.id });
     res.json({
       matchId: req.params.id,
       content: result.content,
-      reliability: 'unconfirmed',
+      reliability: result.reliability,
       updatedAt: result.timestamp,
+      agent: result.agent,
+      geminiAvailable: result.geminiAvailable,
+      sources: result.sources,
     });
   } catch (error) {
     res.status(500).json({ matchId: req.params.id, content: '', reliability: 'unconfirmed', error: (error as Error).message });
@@ -233,13 +243,16 @@ router.get('/:id/analysis', async (req: Request, res: Response) => {
 router.get('/:id/prediction', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generatePrediction(matchContext, req.params.id);
+    const result = await agentOrchestrator.runAgent('Pronostiqueur', { matchContext, matchId: req.params.id });
     res.json({
       matchId: req.params.id,
       prediction: result.content,
       confidence: null,
-      reliability: 'unconfirmed',
+      reliability: result.reliability,
       updatedAt: result.timestamp,
+      agent: result.agent,
+      geminiAvailable: result.geminiAvailable,
+      sources: result.sources,
     });
   } catch (error) {
     res.status(500).json({ matchId: req.params.id, prediction: '', reliability: 'unconfirmed', error: (error as Error).message });
@@ -249,8 +262,12 @@ router.get('/:id/prediction', async (req: Request, res: Response) => {
 router.get('/:id/injuries', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateInjuryReport('les equipes du match', matchContext);
-    res.json({ items: [{ title: 'Blessures', content: result.content, reliability: 'unconfirmed', updatedAt: result.timestamp, source: 'Backend IA' }] });
+    const result = await agentOrchestrator.runAgent('InjuryAgent', {
+      teamName: 'les equipes du match',
+      matchContext,
+      matchId: req.params.id,
+    });
+    res.json({ items: [{ title: 'Blessures', content: result.content, reliability: result.reliability, updatedAt: result.timestamp, source: 'InjuryAgent + Gemini' }] });
   } catch {
     res.json({ items: [] });
   }
@@ -259,8 +276,13 @@ router.get('/:id/injuries', async (req: Request, res: Response) => {
 router.get('/:id/interviews', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateInterview('un joueur cle', 'apres ce match', matchContext, req.params.id);
-    res.json({ items: [{ title: 'Interviews', content: result.content, reliability: 'unconfirmed', updatedAt: result.timestamp, source: 'Backend IA' }] });
+    const result = await agentOrchestrator.runAgent('InterviewAgent', {
+      playerName: 'un joueur cle',
+      occasion: 'apres ce match',
+      matchContext,
+      matchId: req.params.id,
+    });
+    res.json({ items: [{ title: 'Interviews', content: result.content, reliability: result.reliability, updatedAt: result.timestamp, source: 'InterviewAgent + Gemini' }] });
   } catch {
     res.json({ items: [] });
   }
@@ -269,8 +291,12 @@ router.get('/:id/interviews', async (req: Request, res: Response) => {
 router.get('/:id/training', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateTrainingReport('les equipes du match', matchContext);
-    res.json({ items: [{ title: 'Entrainements', content: result.content, reliability: 'unconfirmed', updatedAt: result.timestamp, source: 'Backend IA' }] });
+    const result = await agentOrchestrator.runAgent('TrainingAgent', {
+      teamName: 'les equipes du match',
+      matchContext,
+      matchId: req.params.id,
+    });
+    res.json({ items: [{ title: 'Entrainements', content: result.content, reliability: result.reliability, updatedAt: result.timestamp, source: 'TrainingAgent + Gemini' }] });
   } catch {
     res.json({ items: [] });
   }
@@ -279,8 +305,12 @@ router.get('/:id/training', async (req: Request, res: Response) => {
 router.get('/:id/media', async (req: Request, res: Response) => {
   try {
     const matchContext = await getMatchContext(req.params.id);
-    const result = await geminiService.generateArticle('medias et actualites du match', matchContext, req.params.id);
-    res.json({ items: [{ title: 'Medias', content: result.content, reliability: 'unconfirmed', updatedAt: result.timestamp, source: 'Backend IA' }] });
+    const result = await agentOrchestrator.runAgent('MediaAgent', {
+      topic: 'medias et actualites du match',
+      matchContext,
+      matchId: req.params.id,
+    });
+    res.json({ items: [{ title: 'Medias', content: result.content, reliability: result.reliability, updatedAt: result.timestamp, source: 'MediaAgent + Gemini' }] });
   } catch {
     res.json({ items: [] });
   }

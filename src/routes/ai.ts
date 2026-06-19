@@ -1,16 +1,63 @@
 // ============================================
-// API Routes - AI Agent endpoints
+// API Routes - Hidden AI Agent endpoints
 // ============================================
 import { Router, Request, Response } from 'express';
-import { geminiService } from '../services/gemini-service';
-import { GeminiAgentType, GeminiResponse } from '../types';
+import { agentOrchestrator } from '../services/agent-orchestrator-service';
 
 const router = Router();
 
+function topicFallback(title: string, content: string, source = 'Backend IA'): { items: Array<{ title: string; content: string; reliability: string; updatedAt: string; source: string }> } {
+  return {
+    items: [
+      {
+        title,
+        content,
+        reliability: 'unconfirmed',
+        updatedAt: new Date().toISOString(),
+        source,
+      },
+    ],
+  };
+}
+
+function validAgentNames(): string {
+  return agentOrchestrator.listAgents().map((agent) => agent.name).join(', ');
+}
+
+router.get('/agents', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: agentOrchestrator.listAgents(),
+  });
+});
+
+router.post('/agents/:agent', async (req: Request, res: Response) => {
+  try {
+    const agentName = req.params.agent;
+    if (!agentOrchestrator.resolveAgent(agentName)) {
+      res.status(400).json({ success: false, error: `Invalid agent type. Must be one of: ${validAgentNames()}` });
+      return;
+    }
+
+    const result = await agentOrchestrator.runAgent(agentName, req.body || {});
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+router.post('/orchestrate', async (req: Request, res: Response) => {
+  try {
+    const results = await agentOrchestrator.runAll(req.body || {});
+    res.json({ success: true, data: results });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 /**
  * POST /ai/chat
- * General AI chat with any agent type
- * Body: { agent: GeminiAgentType, message: string, matchContext?: string, matchId?: string }
+ * Body: { agent: string, message: string, matchContext?: string, matchId?: string }
  */
 router.post('/chat', async (req: Request, res: Response) => {
   try {
@@ -24,16 +71,15 @@ router.post('/chat', async (req: Request, res: Response) => {
       return;
     }
 
-    const validAgents: GeminiAgentType[] = ['commentator', 'analyst', 'predictor', 'journalist'];
-    if (!validAgents.includes(agent)) {
+    if (!agentOrchestrator.resolveAgent(agent)) {
       res.status(400).json({
         success: false,
-        error: `Invalid agent type. Must be one of: ${validAgents.join(', ')}`,
+        error: `Invalid agent type. Must be one of: ${validAgentNames()}`,
       });
       return;
     }
 
-    const result = await geminiService.chat(agent, message, matchContext, matchId);
+    const result = await agentOrchestrator.runAgent(agent, { message, matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({
@@ -43,11 +89,6 @@ router.post('/chat', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /ai/commentary
- * Generate live commentary for a match event
- * Body: { matchContext: string, event: string, matchId: string }
- */
 router.post('/commentary', async (req: Request, res: Response) => {
   try {
     const { matchContext, event, matchId } = req.body;
@@ -55,18 +96,19 @@ router.post('/commentary', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: event, matchId' });
       return;
     }
-    const result = await geminiService.generateLiveCommentary(matchContext || '', event, matchId);
+
+    const result = await agentOrchestrator.runAgent('Commentateur', {
+      message: `Commente cette action: ${event}`,
+      matchContext,
+      event,
+      matchId,
+    });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/analysis
- * Generate tactical analysis
- * Body: { matchContext: string, matchId: string }
- */
 router.post('/analysis', async (req: Request, res: Response) => {
   try {
     const { matchContext, matchId } = req.body;
@@ -74,18 +116,14 @@ router.post('/analysis', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: matchId' });
       return;
     }
-    const result = await geminiService.generateAnalysis(matchContext || '', matchId);
+
+    const result = await agentOrchestrator.runAgent('Analyste', { matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/prediction
- * Generate match prediction
- * Body: { matchContext: string, matchId: string }
- */
 router.post('/prediction', async (req: Request, res: Response) => {
   try {
     const { matchContext, matchId } = req.body;
@@ -93,18 +131,14 @@ router.post('/prediction', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: matchId' });
       return;
     }
-    const result = await geminiService.generatePrediction(matchContext || '', matchId);
+
+    const result = await agentOrchestrator.runAgent('Pronostiqueur', { matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/article
- * Generate a news article
- * Body: { topic: string, matchContext?: string, matchId?: string }
- */
 router.post('/article', async (req: Request, res: Response) => {
   try {
     const { topic, matchContext, matchId } = req.body;
@@ -112,18 +146,43 @@ router.post('/article', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: topic' });
       return;
     }
-    const result = await geminiService.generateArticle(topic, matchContext, matchId);
+
+    const result = await agentOrchestrator.runAgent('Journaliste', { topic, matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/injury-report
- * Generate injury report for a team
- * Body: { teamName: string, matchContext?: string }
- */
+router.post('/summary', async (req: Request, res: Response) => {
+  try {
+    const { matchContext, matchId } = req.body;
+    const result = await agentOrchestrator.runAgent('Journaliste', {
+      message: 'Resume court du match.',
+      topic: 'resume court du match',
+      matchContext,
+      matchId,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+router.post('/news', async (req: Request, res: Response) => {
+  try {
+    const { topic, matchContext, matchId } = req.body;
+    const result = await agentOrchestrator.runAgent('MediaAgent', {
+      topic: topic || 'actualites Coupe du Monde 2026',
+      matchContext,
+      matchId,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 router.post('/injury-report', async (req: Request, res: Response) => {
   try {
     const { teamName, matchContext } = req.body;
@@ -131,18 +190,27 @@ router.post('/injury-report', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: teamName' });
       return;
     }
-    const result = await geminiService.generateInjuryReport(teamName, matchContext);
+
+    const result = await agentOrchestrator.runAgent('InjuryAgent', { teamName, matchContext });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/interview
- * Generate a fictional but realistic interview
- * Body: { playerName: string, occasion: string, matchContext?: string, matchId?: string }
- */
+router.post('/injuries', async (req: Request, res: Response) => {
+  try {
+    const { teamName, matchContext } = req.body;
+    const result = await agentOrchestrator.runAgent('InjuryAgent', {
+      teamName: teamName || 'les equipes africaines',
+      matchContext,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 router.post('/interview', async (req: Request, res: Response) => {
   try {
     const { playerName, occasion, matchContext, matchId } = req.body;
@@ -150,18 +218,29 @@ router.post('/interview', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: playerName, occasion' });
       return;
     }
-    const result = await geminiService.generateInterview(playerName, occasion, matchContext, matchId);
+
+    const result = await agentOrchestrator.runAgent('InterviewAgent', { playerName, occasion, matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * POST /ai/training-report
- * Generate training report
- * Body: { teamName: string, matchContext?: string }
- */
+router.post('/interviews', async (req: Request, res: Response) => {
+  try {
+    const { playerName, occasion, matchContext, matchId } = req.body;
+    const result = await agentOrchestrator.runAgent('InterviewAgent', {
+      playerName: playerName || 'un joueur important',
+      occasion: occasion || 'autour de la Coupe du Monde 2026',
+      matchContext,
+      matchId,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 router.post('/training-report', async (req: Request, res: Response) => {
   try {
     const { teamName, matchContext } = req.body;
@@ -169,10 +248,66 @@ router.post('/training-report', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Missing: teamName' });
       return;
     }
-    const result = await geminiService.generateTrainingReport(teamName, matchContext);
+
+    const result = await agentOrchestrator.runAgent('TrainingAgent', { teamName, matchContext });
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+router.post('/training', async (req: Request, res: Response) => {
+  try {
+    const { teamName, matchContext } = req.body;
+    const result = await agentOrchestrator.runAgent('TrainingAgent', {
+      teamName: teamName || 'les equipes africaines',
+      matchContext,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+router.get('/news', async (_req: Request, res: Response) => {
+  try {
+    const result = await agentOrchestrator.runAgent('MediaAgent', { topic: 'actualites Coupe du Monde 2026' });
+    res.json(topicFallback('Actualites CDM 2026', result.content, 'MediaAgent + Gemini'));
+  } catch {
+    res.json(topicFallback(
+      'Actualites CDM 2026',
+      'Les flux publics ne sont pas encore disponibles. Les sources serveur restent pretes: FAPI/TheStatsAPI, SportDB/Flashscore et Gemini.'
+    ));
+  }
+});
+
+router.get('/injuries', async (_req: Request, res: Response) => {
+  try {
+    const result = await agentOrchestrator.runAgent('InjuryAgent', { teamName: 'les equipes africaines' });
+    res.json(topicFallback('Blessures', result.content, 'InjuryAgent + Gemini'));
+  } catch {
+    res.json(topicFallback('Blessures', 'Aucune blessure confirmee pour le moment.', 'Backend IA'));
+  }
+});
+
+router.get('/interviews', async (_req: Request, res: Response) => {
+  try {
+    const result = await agentOrchestrator.runAgent('InterviewAgent', {
+      playerName: 'un joueur important',
+      occasion: 'autour de la Coupe du Monde 2026',
+    });
+    res.json(topicFallback('Interviews', result.content, 'InterviewAgent + Gemini'));
+  } catch {
+    res.json(topicFallback('Interviews', 'Aucune interview officielle disponible pour le moment.', 'Backend IA'));
+  }
+});
+
+router.get('/training', async (_req: Request, res: Response) => {
+  try {
+    const result = await agentOrchestrator.runAgent('TrainingAgent', { teamName: 'les equipes africaines' });
+    res.json(topicFallback('Entrainements', result.content, 'TrainingAgent + Gemini'));
+  } catch {
+    res.json(topicFallback('Entrainements', 'Aucune information entrainement confirmee pour le moment.', 'Backend IA'));
   }
 });
 

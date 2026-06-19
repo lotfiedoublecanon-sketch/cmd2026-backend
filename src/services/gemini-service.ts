@@ -4,12 +4,14 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { GeminiAgentType, GeminiResponse } from '../types';
+import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
 dotenv.config();
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_API_KEY = readConfigValue('GEMINI_API_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY');
+const GEMINI_MODEL = readConfigValueOrDefault(['GEMINI_MODEL', 'GOOGLE_GEMINI_MODEL'], 'gemini-2.5-flash');
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
 interface GeminiRequest {
   contents: Array<{
@@ -34,6 +36,18 @@ const AGENT_SYSTEM_PROMPTS: Record<GeminiAgentType, string> = {
 
   journalist: `Tu es un journaliste sportif couvrant la Coupe du Monde 2026. Tu rédiges des articles, des résumés de match, des interviews fictives réalistes, des infos sur les blessures et entraînements. Tu parles en français. Style professionnel mais engageant, avec des titres accrocheurs.`,
 };
+
+function normalizeModelName(model: string): string {
+  return model.replace(/^models\//, '').trim();
+}
+
+function getModelCandidates(): string[] {
+  return Array.from(new Set([normalizeModelName(GEMINI_MODEL), ...GEMINI_FALLBACK_MODELS].filter(Boolean)));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 class GeminiService {
   private cache = new Map<string, { data: GeminiResponse; expires: number }>();
@@ -70,11 +84,32 @@ class GeminiService {
         },
       };
 
-      const response = await axios.post(
-        `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-        body,
-        { timeout: 15000 }
-      );
+      let response: any = null;
+      let lastError: any = null;
+      for (const model of getModelCandidates()) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            response = await axios.post(
+              `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+              body,
+              { timeout: 15000 }
+            );
+            break;
+          } catch (error: any) {
+            lastError = error;
+            const status = error.response?.status;
+            console.warn('[Gemini] Model failed:', model, status || error.message);
+            if ((status === 429 || status === 500 || status === 503) && attempt === 0) {
+              await sleep(900);
+              continue;
+            }
+            if (status && status !== 400 && status !== 404 && status !== 429 && status !== 500 && status !== 503) break;
+          }
+        }
+        if (response) break;
+      }
+
+      if (!response) throw lastError || new Error('No Gemini response');
 
       const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Désolé, je ne peux pas répondre pour le moment.';
 

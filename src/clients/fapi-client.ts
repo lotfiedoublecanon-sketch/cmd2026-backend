@@ -8,12 +8,13 @@ import {
   MatchStats, StatCategory, MatchLineups, LineupPlayer,
   TeamInfo, MatchStatus, MatchPeriod
 } from '../types';
+import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
 dotenv.config();
 
-const FAPI_BASE_URL = process.env.FAPI_BASE_URL || process.env.THESTATSAPI_BASE_URL || 'https://api.thestatsapi.com/v2';
-const FAPI_API_KEY = process.env.FAPI_API_KEY || process.env.THESTATSAPI_KEY || '';
-const FAPI_COMPETITION_ID = process.env.FAPI_COMPETITION_ID || process.env.WORLD_CUP_COMPETITION_ID || 'comp_6107';
+const FAPI_BASE_URL = readConfigValueOrDefault(['FAPI_BASE_URL', 'THESTATSAPI_BASE_URL'], 'https://api.thestatsapi.com/v2');
+const FAPI_API_KEY = readConfigValue('FAPI_API_KEY', 'THESTATSAPI_KEY');
+const FAPI_COMPETITION_ID = readConfigValueOrDefault(['FAPI_COMPETITION_ID', 'WORLD_CUP_COMPETITION_ID'], 'comp_6107');
 const FAPI_TIMEOUT = parseInt(process.env.FAPI_TIMEOUT_MS || '8000', 10);
 
 class FapiClient {

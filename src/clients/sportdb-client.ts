@@ -8,12 +8,13 @@ import {
   MatchStats, MatchLineups, LineupPlayer,
   TeamInfo, MatchStatus, StandingEntry
 } from '../types';
+import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
 dotenv.config();
 
-const SPORTDB_BASE_URL = process.env.SPORTDB_BASE_URL || 'https://www.thesportsdb.com/api/v1/json';
-const SPORTDB_API_KEY = process.env.SPORTDB_API_KEY || '';
-const SPORTDB_LEAGUE_ID = process.env.SPORTDB_LEAGUE_ID || '4636';
+const SPORTDB_BASE_URL = readConfigValueOrDefault(['SPORTDB_BASE_URL'], 'https://www.thesportsdb.com/api/v1/json');
+const SPORTDB_API_KEY = readConfigValue('SPORTDB_API_KEY');
+const SPORTDB_LEAGUE_ID = readConfigValueOrDefault(['SPORTDB_LEAGUE_ID'], '4636');
 const SPORTDB_TIMEOUT = parseInt(process.env.SPORTDB_TIMEOUT_MS || '8000', 10);
 
 class SportDbClient {
