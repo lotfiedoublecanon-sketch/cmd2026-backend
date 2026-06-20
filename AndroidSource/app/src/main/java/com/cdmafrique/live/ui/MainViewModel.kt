@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
  * 2. _error contient uniquement des messages user-friendly
  * 3. loadLiveMatches() ne pollue plus _error si le backend est vide
  * 4. Les fallbacks locaux sont utilisés silencieusement
- * 5. Les erreurs "Expected BEGIN_OBJECT" et "Unable to resolve host" ne remontent plus
+ * 5. Les erreurs techniques de parsing ou reseau ne remontent plus.
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 

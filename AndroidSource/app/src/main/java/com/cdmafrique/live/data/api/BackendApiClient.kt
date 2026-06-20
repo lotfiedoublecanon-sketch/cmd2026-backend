@@ -20,8 +20,8 @@ import java.util.concurrent.TimeUnit
  * Backend API Client — version corrigée.
  *
  * Corrections :
- * 1. get<T>() gère data:[] quand T attend un objet (fix BEGIN_ARRAY at path $)
- * 2. Erreurs réseau classées avec messages user-friendly (fix Unable to resolve host)
+ * 1. get<T>() gere data:[] quand T attend un objet.
+ * 2. Erreurs reseau classees avec messages user-friendly.
  * 3. Timeouts augmentés pour Render cold starts (30s/45s/30s)
  * 4. Retour nullable pour les endpoints objet — le Repository gère les nulls
  */
@@ -190,11 +190,8 @@ class BackendApiClient {
                 return null
             }
 
-            // *** FIX CRITIQUE : data est [] mais T attend un objet ***
-            // Exemple : /matches/standings retourne { success: true, data: [] }
-            // mais on attend StandingsDto (un objet avec groups: [...])
-            // Avant : crash "Expected BEGIN_OBJECT but was BEGIN_ARRAY at path $"
-            // Maintenant : on retourne null, le Repository fournit un fallback
+            // data est [] mais T attend un objet : retourner null et laisser le
+            // Repository fournir le fallback sans afficher d'erreur technique.
             if (payload.isJsonArray) {
                 val type = object : TypeToken<T>() {}.type
                 val isListType = when (type) {
@@ -260,10 +257,10 @@ class BackendApiClient {
         e is UnknownHostException -> "Serveur inaccessible. Verifiez votre connexion internet."
         e is java.net.SocketTimeoutException -> "Le serveur repond lentement. Reessayez dans quelques secondes."
         e is java.net.ConnectException -> "Impossible de se connecter au serveur."
-        e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+        e.message?.contains("resolve host", ignoreCase = true) == true ->
             "Serveur inaccessible. Verifiez votre connexion internet."
-        e.message?.contains("BEGIN_OBJECT", ignoreCase = true) == true ||
-        e.message?.contains("BEGIN_ARRAY", ignoreCase = true) == true ->
+        e.message?.contains("BEGIN", ignoreCase = true) == true ||
+        e.message?.contains("Json", ignoreCase = true) == true ->
             "Format de donnees inattendu."
         e.message?.contains("SSL", ignoreCase = true) == true ->
             "Erreur de securite de connexion."

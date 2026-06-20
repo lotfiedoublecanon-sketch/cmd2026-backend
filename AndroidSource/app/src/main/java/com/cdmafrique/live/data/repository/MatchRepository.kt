@@ -11,8 +11,8 @@ import com.cdmafrique.live.data.model.*
  * 1. Gère les retours null de BackendApiClient (data:[] → null)
  * 2. Fournit des valeurs par défaut au lieu de crasher
  * 3. Erreurs classées en user-friendly, jamais techniques
- * 4. Plus jamais "Expected BEGIN_OBJECT but was BEGIN_ARRAY"
- * 5. Plus jamais "Unable to resolve host" affiché tel quel
+ * 4. Plus jamais d'erreur JSON brute.
+ * 5. Plus jamais d'erreur reseau brute affichee telle quelle.
  */
 class MatchRepository(
     private val api: BackendApiClient = BackendApiClient()
@@ -73,10 +73,8 @@ class MatchRepository(
 
     // ── Standings ───────────────────────────────────────────
     //
-    // FIX : getStandings() peut retourner null quand le backend
-    // renvoie data:[] (tableau vide au lieu d'un objet).
-    // Avant : crash "Expected BEGIN_OBJECT but was BEGIN_ARRAY"
-    // Maintenant : retourne liste vide → le ViewModel utilise le fallback local
+    // getStandings() peut retourner null quand le backend renvoie data:[].
+    // Le ViewModel utilise alors le fallback local.
 
     suspend fun getStandings(): Result<List<StandingGroup>> = try {
         val dto = api.getStandings()
@@ -191,16 +189,13 @@ class MatchRepository(
 
     // ── Error Mapping ───────────────────────────────────────
     //
-    // Ne jamais afficher de message technique à l'utilisateur.
-    // "Unable to resolve host" → "Serveur inaccessible"
-    // "Expected BEGIN_OBJECT" → "Données indisponibles"
-    // "HTTP 503" → "Serveur en réveil"
+    // Ne jamais afficher de message technique a l'utilisateur.
 
     private fun userFriendlyMessage(e: Exception): String = when {
-        e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+        e.message?.contains("resolve host", ignoreCase = true) == true ->
             "Serveur inaccessible. Verifiez votre connexion internet."
-        e.message?.contains("BEGIN_OBJECT", ignoreCase = true) == true ||
-        e.message?.contains("BEGIN_ARRAY", ignoreCase = true) == true ->
+        e.message?.contains("BEGIN", ignoreCase = true) == true ||
+        e.message?.contains("Json", ignoreCase = true) == true ->
             "Donnees indisponibles pour le moment."
         e.message?.contains("timeout", ignoreCase = true) == true ->
             "Le serveur repond lentement. Reessayez."

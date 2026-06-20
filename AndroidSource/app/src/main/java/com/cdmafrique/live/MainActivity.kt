@@ -696,7 +696,7 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
     }
     InfoCard(
         title = "Architecture",
-        body = "Render V5 + FAPI/TheStatsAPI principal + SportDB/Flashscore secours + Gemini interne + Firebase FCM."
+        body = "Render V5 + sources live cote serveur + IA interne + Firebase FCM."
     )
     OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Rounded.Refresh, contentDescription = null)

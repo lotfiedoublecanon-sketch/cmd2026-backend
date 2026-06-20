@@ -129,7 +129,7 @@ class LocalWorldCupFallback(private val context: Context) {
             id = "local-render-status",
             title = "Backend Render connecte",
             summary = "La V5 interroge le backend public valide. Les donnees live officielles apparaissent automatiquement quand les sources repondent.",
-            content = "Sources cote serveur : FAPI/TheStatsAPI, SportDB/Flashscore, Gemini et Firebase FCM.",
+            content = "Sources cote serveur : donnees live, validation secours, IA interne et Firebase FCM.",
             imageUrl = null,
             publishedAt = null,
             source = "Diagnostic V5"
