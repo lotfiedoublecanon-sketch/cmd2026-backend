@@ -11,8 +11,9 @@ import {
   NormalizedMatch,
   StandingEntry,
 } from '../types';
+import { getEnabledSources } from '../config/open-sources';
 
-type SourceName = 'fapi' | 'sportdb' | 'merged' | 'cache' | 'backend';
+type SourceName = 'fapi' | 'sportdb' | 'merged' | 'cache' | 'backend' | 'media_sources';
 
 export interface AgentRunInput {
   agent?: string;
@@ -136,6 +137,7 @@ function buildSourceFallback(definition: AgentDefinition, context: CollectedCont
   if (context.counts.events !== undefined) lines.push(`Evenements match: ${context.counts.events}.`);
   if (context.counts.stats !== undefined) lines.push(`Stats match: ${context.counts.stats}.`);
   if (context.counts.lineups !== undefined) lines.push(`Joueurs compo: ${context.counts.lineups}.`);
+  if (context.counts.mediaSources !== undefined) lines.push(`Sources medias publiques activees: ${context.counts.mediaSources}.`);
 
   lines.push('Des que la cle Gemini Render est valide, cet agent generera une analyse complete avec ce contexte.');
   return lines.join('\n');
@@ -307,10 +309,26 @@ class AgentOrchestratorService {
     const blocks: Array<Record<string, unknown>> = [];
 
     const addSource = (source?: string) => {
-      if (source === 'fapi' || source === 'sportdb' || source === 'merged' || source === 'cache') {
+      if (source === 'fapi' || source === 'sportdb' || source === 'merged' || source === 'cache' || source === 'media_sources') {
         sources.add(source);
       }
     };
+
+    if (input.agent === 'MediaAgent') {
+      const mediaSources = getEnabledSources();
+      addSource('media_sources');
+      counts.mediaSources = mediaSources.length;
+      blocks.push({
+        mediaSources: mediaSources.map((source) => ({
+          id: source.id,
+          name: source.name,
+          type: source.type,
+          homepage: source.homepage,
+          categories: source.categories,
+        })),
+        source: 'media_sources',
+      });
+    }
 
     if (input.matchId) {
       const [match, events, stats, lineups] = await Promise.allSettled([
