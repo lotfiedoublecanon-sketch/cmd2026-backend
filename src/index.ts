@@ -13,6 +13,7 @@ import matchesRouter from './routes/matches';
 import aiRouter from './routes/ai';
 import notificationsRouter from './routes/notifications';
 import { agentOrchestrator } from './services/agent-orchestrator-service';
+import { checkSourcesHealth, getEnabledSources } from './config/open-sources';
 import { hasConfigValue } from './utils/env';
 
 const app = express();
@@ -103,8 +104,36 @@ app.get('/diagnostic', (req, res) => {
       'GET /interviews',
       'GET /injuries',
       'GET /training',
+      'GET /sources',
+      'GET /sources/health',
       'GET /diagnostic',
     ],
+  });
+});
+
+app.get('/sources', (req, res) => {
+  const sources = getEnabledSources();
+  res.json({
+    success: true,
+    backendOnly: true,
+    count: sources.length,
+    sources: sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      type: source.type,
+      homepage: source.homepage,
+      categories: source.categories,
+      backendOnly: source.backendOnly ?? true,
+    })),
+  });
+});
+
+app.get('/sources/health', async (req, res) => {
+  const sources = await checkSourcesHealth();
+  res.json({
+    success: true,
+    checkedAt: new Date().toISOString(),
+    sources,
   });
 });
 
@@ -362,6 +391,8 @@ app.get('/', (req, res) => {
       diagnostic: {
         'GET /health': 'Minimal health check',
         'GET /diagnostic': 'Safe deployment diagnostic without secrets',
+        'GET /sources': 'List enabled public backend sources for agents',
+        'GET /sources/health': 'Check public source availability without secrets',
         'GET /articles': 'Global articles feed',
         'GET /videos': 'Global videos/media feed',
         'GET /interviews': 'Global interviews feed',
