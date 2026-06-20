@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CDM 2026 Live</string>
+    <string name="tab_direct">Direct</string>
+    <string name="tab_today">Aujourd\'hui</string>
+    <string name="tab_upcoming">À venir</string>
+    <string name="tab_resume">Résumé</string>
+    <string name="tab_events">Events</string>
+    <string name="tab_stats">Stats</string>
+    <string name="tab_compo">Compo</string>
+    <string name="tab_medias">Médias</string>
+    <string name="tab_blessures">Blessures</string>
+    <string name="tab_interviews">Interviews</string>
+    <string name="tab_entrainements">Entraînements</string>
+    <string name="nav_live">Direct</string>
+    <string name="nav_match">Match</string>
+    <string name="nav_notifications">Notifications</string>
+    <string name="nav_diagnostic">Diagnostic</string>
+    <string name="no_live_matches">Aucun match en direct</string>
+    <string name="no_today_matches">Aucun match aujourd\'hui</string>
+    <string name="no_upcoming_matches">Aucun match à venir</string>
+    <string name="loading">Chargement…</string>
+    <string name="error_occurred">Une erreur est survenue</string>
+    <string name="retry">Réessayer</string>
+    <string name="reliability_official">Source officielle</string>
+    <string name="reliability_reliable">Info fiable</string>
+    <string name="reliability_unconfirmed">À confirmer</string>
+    <string name="widget_description">Scores africains, live et diagnostic V5</string>
+</resources>

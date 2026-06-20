@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CDM 2026 Color Palette -->
+    <color name="cdm_green_dark">#FF1B5E20</color>
+    <color name="cdm_green">#FF2E7D32</color>
+    <color name="cdm_green_light">#FF4CAF50</color>
+    <color name="cdm_gold">#FFFFB300</color>
+    <color name="cdm_gold_dark">#FFFF8F00</color>
+    <color name="cdm_red">#FFD32F2F</color>
+    <color name="cdm_red_dark">#FFB71C1C</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray_dark">#FF212121</color>
+    <color name="gray_medium">#FF757575</color>
+    <color name="gray_light">#FFE0E0E0</color>
+
+    <!-- Status colors -->
+    <color name="status_live">#FF4CAF50</color>
+    <color name="status_finished">#FF9E9E9E</color>
+    <color name="status_scheduled">#FF42A5F5</color>
+
+    <!-- Reliability -->
+    <color name="reliability_official">#FF4CAF50</color>
+    <color name="reliability_reliable">#FFFF9800</color>
+    <color name="reliability_unconfirmed">#FF9E9E9E</color>
+</resources>

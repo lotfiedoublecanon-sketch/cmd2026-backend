@@ -1,0 +1,272 @@
+package com.cdmafrique.live.data.api
+
+import com.cdmafrique.live.BuildConfig
+import com.google.gson.Gson
+import com.google.gson.JsonNull
+import com.google.gson.JsonParser
+import com.google.gson.JsonSyntaxException
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import java.lang.reflect.ParameterizedType
+import java.net.UnknownHostException
+import java.util.concurrent.TimeUnit
+
+/**
+ * Backend API Client — version corrigée.
+ *
+ * Corrections :
+ * 1. get<T>() gère data:[] quand T attend un objet (fix BEGIN_ARRAY at path $)
+ * 2. Erreurs réseau classées avec messages user-friendly (fix Unable to resolve host)
+ * 3. Timeouts augmentés pour Render cold starts (30s/45s/30s)
+ * 4. Retour nullable pour les endpoints objet — le Repository gère les nulls
+ */
+class BackendApiClient {
+
+    private val baseUrl: String = BuildConfig.BACKEND_URL
+
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)   // Render cold start peut prendre 10-20s
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val gson = Gson()
+
+    var apiCallCount = 0
+        private set
+
+    var lastError: String? = null
+        private set
+
+    // ── Live Matches ────────────────────────────────────────
+
+    suspend fun getLiveMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
+        get("/matches/live") ?: emptyList()
+    }
+
+    suspend fun getTodayMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
+        get("/matches/today") ?: emptyList()
+    }
+
+    suspend fun getUpcomingMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
+        get("/matches/upcoming?days=30") ?: emptyList()
+    }
+
+    suspend fun getMatchById(matchId: String): MatchDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId")
+    }
+
+    // ── Match Details ───────────────────────────────────────
+
+    suspend fun getMatchEvents(matchId: String): List<MatchEventDto> = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/events") ?: emptyList()
+    }
+
+    suspend fun getMatchStats(matchId: String): MatchStatsDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/stats")
+    }
+
+    suspend fun getMatchLineups(matchId: String): MatchLineupsDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/lineups")
+    }
+
+    // ── Standings ───────────────────────────────────────────
+
+    suspend fun getStandings(): StandingsDto? = withContext(Dispatchers.IO) {
+        get("/matches/standings")
+    }
+
+    // ── AI Content (agents hidden from user) ────────────────
+
+    suspend fun getCommentary(matchId: String): CommentaryDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/commentary")
+    }
+
+    suspend fun getAnalysis(matchId: String): AnalysisDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/analysis")
+    }
+
+    suspend fun getPrediction(matchId: String): PredictionDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/prediction")
+    }
+
+    // ── Content Tabs ────────────────────────────────────────
+
+    suspend fun getInjuries(matchId: String): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/injuries")
+    }
+
+    suspend fun getInterviews(matchId: String): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/interviews")
+    }
+
+    suspend fun getTraining(matchId: String): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/training")
+    }
+
+    suspend fun getMedia(matchId: String): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/matches/$matchId/media")
+    }
+
+    suspend fun getArticles(): ArticleListDto? = withContext(Dispatchers.IO) {
+        get("/articles")
+    }
+
+    // ── Trust / Reliability ─────────────────────────────────
+
+    suspend fun getTrust(): Map<String, String> = withContext(Dispatchers.IO) {
+        get("/trust") ?: emptyMap()
+    }
+
+    // ── FCM ─────────────────────────────────────────────────
+
+    suspend fun registerFcmToken(token: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val json = gson.toJson(FcmTokenDto(token))
+            val body = json.toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("$baseUrl/notifications/register")
+                .post(body)
+                .build()
+            apiCallCount++
+            client.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            lastError = classifyError(e)
+            false
+        }
+    }
+
+    // ── Health ──────────────────────────────────────────────
+
+    suspend fun checkHealth(): HealthDto? = withContext(Dispatchers.IO) {
+        get("/diagnostic")
+    }
+
+    // ── Generic GET ─────────────────────────────────────────
+    //
+    // FIX PRINCIPAL :
+    // - Retourne T? (nullable) au lieu de T
+    // - Détecte data:[] quand T attend un objet → retourne null au lieu de crasher
+    // - Erreurs réseau classées proprement
+    // - Render cold start toléré
+
+    private inline fun <reified T> get(path: String): T? {
+        val request = Request.Builder()
+            .url("$baseUrl$path")
+            .get()
+            .build()
+        apiCallCount++
+        try {
+            val response = client.newCall(request).execute()
+            val body = response.body?.string()
+
+            if (!response.isSuccessful || body == null) {
+                lastError = if (response.code == 503) {
+                    "Backend en reveil, veuillez reessayer dans quelques secondes."
+                } else {
+                    "Erreur serveur temporaire. Reessayez dans quelques instants."
+                }
+                return null
+            }
+
+            val root = JsonParser.parseString(body)
+
+            // Extraire le payload : si le backend envoie { success, data }, prendre data
+            val payload = if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.has("data")) {
+                root.asJsonObject.get("data")
+            } else {
+                root
+            }
+
+            // Si payload null ou JsonNull → données vides
+            if (payload == null || payload is JsonNull || payload.isJsonNull) {
+                return null
+            }
+
+            // *** FIX CRITIQUE : data est [] mais T attend un objet ***
+            // Exemple : /matches/standings retourne { success: true, data: [] }
+            // mais on attend StandingsDto (un objet avec groups: [...])
+            // Avant : crash "Expected BEGIN_OBJECT but was BEGIN_ARRAY at path $"
+            // Maintenant : on retourne null, le Repository fournit un fallback
+            if (payload.isJsonArray) {
+                val type = object : TypeToken<T>() {}.type
+                val isListType = when (type) {
+                    is ParameterizedType -> {
+                        val raw = type.rawType
+                        raw is Class<*> && List::class.java.isAssignableFrom(raw)
+                    }
+                    is Class<*> -> List::class.java.isAssignableFrom(type)
+                    else -> false
+                }
+
+                if (isListType) {
+                    // T est une List → désérialiser normalement (ex: List<MatchDto>)
+                    return try {
+                        gson.fromJson<T>(payload, type)
+                    } catch (e: JsonSyntaxException) {
+                        emptyList<Any>() as T
+                    }
+                } else {
+                    // T attend un objet mais on a un tableau
+                    // Si le tableau est vide → pas de données, retourner null
+                    if (payload.asJsonArray.size() == 0) {
+                        return null
+                    }
+                    // Si le tableau n'est pas vide, essayer de prendre le premier élément
+                    return try {
+                        gson.fromJson<T>(payload.asJsonArray[0], object : TypeToken<T>() {}.type)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
+
+            // Payload est un objet JSON → désérialiser normalement
+            val type = object : TypeToken<T>() {}.type
+            return try {
+                gson.fromJson<T>(payload, type)
+            } catch (e: JsonSyntaxException) {
+                // Erreur de parsing : logger mais ne pas crasher
+                lastError = "Erreur de format de donnees."
+                null
+            }
+
+        } catch (e: UnknownHostException) {
+            // DNS non résolu → pas de connexion internet ou host incorrect
+            lastError = "Serveur inaccessible. Verifiez votre connexion internet."
+            return null
+        } catch (e: java.net.SocketTimeoutException) {
+            // Timeout → Render se réveille ou réseau lent
+            lastError = "Le serveur repond lentement. Reessayez dans quelques secondes."
+            return null
+        } catch (e: java.net.ConnectException) {
+            lastError = "Impossible de se connecter au serveur."
+            return null
+        } catch (e: Exception) {
+            lastError = classifyError(e)
+            return null
+        }
+    }
+
+    /** Classe les erreurs techniques en messages user-friendly */
+    private fun classifyError(e: Exception): String = when {
+        e is UnknownHostException -> "Serveur inaccessible. Verifiez votre connexion internet."
+        e is java.net.SocketTimeoutException -> "Le serveur repond lentement. Reessayez dans quelques secondes."
+        e is java.net.ConnectException -> "Impossible de se connecter au serveur."
+        e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+            "Serveur inaccessible. Verifiez votre connexion internet."
+        e.message?.contains("BEGIN_OBJECT", ignoreCase = true) == true ||
+        e.message?.contains("BEGIN_ARRAY", ignoreCase = true) == true ->
+            "Format de donnees inattendu."
+        e.message?.contains("SSL", ignoreCase = true) == true ->
+            "Erreur de securite de connexion."
+        else -> "Erreur de connexion. Reessayez."
+    }
+}

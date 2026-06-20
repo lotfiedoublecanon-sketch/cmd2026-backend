@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CDM 2026 Live Theme — dark green background matching the logo for seamless splash -->
+    <style name="Theme.CDM2026Live" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/cdm_green_dark</item>
+        <item name="android:navigationBarColor">@color/cdm_green_dark</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/cdm_green_dark</item>
+    </style>
+</resources>
