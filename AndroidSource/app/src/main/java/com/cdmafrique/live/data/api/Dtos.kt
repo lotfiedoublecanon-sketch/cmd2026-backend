@@ -90,12 +90,12 @@ data class LineupPlayerDto(
 // ── Standings DTOs ──────────────────────────────────────────
 
 data class StandingsDto(
-    val groups: List<StandingGroupDto>
+    val groups: List<StandingGroupDto> = emptyList()
 )
 
 data class StandingGroupDto(
-    val name: String,
-    val entries: List<StandingEntryDto>
+    val name: String = "Groupes",
+    val entries: List<StandingEntryDto> = emptyList()
 )
 
 data class StandingEntryDto(
@@ -124,7 +124,7 @@ data class ContentResultDto(
 )
 
 data class ContentListDto(
-    val items: List<ContentResultDto>
+    val items: List<ContentResultDto> = emptyList()
 )
 
 // ── Analysis / Prediction DTOs ──────────────────────────────
@@ -146,7 +146,7 @@ data class PredictionDto(
 
 data class CommentaryDto(
     val matchId: String,
-    val items: List<CommentaryItemDto>
+    val items: List<CommentaryItemDto> = emptyList()
 )
 
 data class CommentaryItemDto(
@@ -211,5 +211,5 @@ data class ArticleDto(
 )
 
 data class ArticleListDto(
-    val items: List<ArticleDto>
+    val items: List<ArticleDto> = emptyList()
 )

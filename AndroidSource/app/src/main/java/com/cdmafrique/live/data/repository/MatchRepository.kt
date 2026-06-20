@@ -17,6 +17,7 @@ import com.cdmafrique.live.data.model.*
 class MatchRepository(
     private val api: BackendApiClient = BackendApiClient()
 ) {
+    private val temporaryError = "Serveur temporairement indisponible, réessayez."
 
     // ── Live / Today / Upcoming ─────────────────────────────
 
@@ -166,7 +167,7 @@ class MatchRepository(
                 backendUptime = null,
                 backendVersion = null,
                 apiCallCount = api.apiCallCount,
-                lastError = api.lastError ?: "Pas de reponse du serveur.",
+                lastError = api.lastError ?: temporaryError,
                 appVersion = BuildConfig.VERSION_NAME
             )
         }
@@ -193,14 +194,14 @@ class MatchRepository(
 
     private fun userFriendlyMessage(e: Exception): String = when {
         e.message?.contains("resolve host", ignoreCase = true) == true ->
-            "Serveur inaccessible. Verifiez votre connexion internet."
+            temporaryError
         e.message?.contains("BEGIN", ignoreCase = true) == true ||
         e.message?.contains("Json", ignoreCase = true) == true ->
-            "Donnees indisponibles pour le moment."
+            temporaryError
         e.message?.contains("timeout", ignoreCase = true) == true ->
-            "Le serveur repond lentement. Reessayez."
+            temporaryError
         e.message?.contains("SSL", ignoreCase = true) == true ->
-            "Erreur de securite de connexion."
-        else -> "Donnees temporairement indisponibles. Reessayez."
+            temporaryError
+        else -> temporaryError
     }
 }

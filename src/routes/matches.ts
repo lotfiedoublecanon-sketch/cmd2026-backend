@@ -4,9 +4,35 @@
 import { Router, Request, Response } from 'express';
 import { mergeService } from '../services/merge-service';
 import { agentOrchestrator } from '../services/agent-orchestrator-service';
-import { ApiResponse, NormalizedMatch, MatchEvent, MatchStats, MatchLineups } from '../types';
+import { ApiResponse, NormalizedMatch, MatchEvent, MatchStats, MatchLineups, StandingEntry } from '../types';
 
 const router = Router();
+
+function standingsAsGroups(entries: StandingEntry[] = []) {
+  const groups = new Map<string, StandingEntry[]>();
+  for (const entry of entries) {
+    const groupName = entry.group || 'Groupes';
+    groups.set(groupName, [...(groups.get(groupName) || []), entry]);
+  }
+
+  return Array.from(groups.entries()).map(([name, rows]) => ({
+    name,
+    entries: rows.map((entry) => ({
+      teamId: entry.team.id,
+      teamName: entry.team.name,
+      teamCode: entry.team.threeCharCode || entry.team.shortName || null,
+      teamFlag: entry.team.logoUrl || null,
+      played: entry.played,
+      won: entry.won,
+      drawn: entry.drawn,
+      lost: entry.lost,
+      goalsFor: entry.goalsFor,
+      goalsAgainst: entry.goalsAgainst,
+      goalDifference: entry.goalDifference,
+      points: entry.points,
+    })),
+  }));
+}
 
 async function getMatchContext(matchId: string): Promise<string> {
   const result = await mergeService.getMatchById(matchId);
@@ -97,13 +123,14 @@ router.get('/standings', async (req: Request, res: Response) => {
     const result = await mergeService.getStandings();
     const response = {
       ...result,
+      data: { groups: standingsAsGroups(result.data) },
       cachedAt: new Date().toISOString(),
     };
     res.json(response);
   } catch (error) {
     res.status(500).json({
       success: false,
-      data: [],
+      data: { groups: [] },
       source: 'fapi',
       error: (error as Error).message,
     });

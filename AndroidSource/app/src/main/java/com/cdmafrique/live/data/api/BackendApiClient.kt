@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit
  */
 class BackendApiClient {
 
+    private val temporaryError = "Serveur temporairement indisponible, réessayez."
     private val baseUrl: String = BuildConfig.BACKEND_URL
 
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -169,9 +170,9 @@ class BackendApiClient {
 
             if (!response.isSuccessful || body == null) {
                 lastError = if (response.code == 503) {
-                    "Backend en reveil, veuillez reessayer dans quelques secondes."
+                    temporaryError
                 } else {
-                    "Erreur serveur temporaire. Reessayez dans quelques instants."
+                    temporaryError
                 }
                 return null
             }
@@ -231,20 +232,20 @@ class BackendApiClient {
                 gson.fromJson<T>(payload, type)
             } catch (e: JsonSyntaxException) {
                 // Erreur de parsing : logger mais ne pas crasher
-                lastError = "Erreur de format de donnees."
+                lastError = temporaryError
                 null
             }
 
         } catch (e: UnknownHostException) {
             // DNS non résolu → pas de connexion internet ou host incorrect
-            lastError = "Serveur inaccessible. Verifiez votre connexion internet."
+            lastError = temporaryError
             return null
         } catch (e: java.net.SocketTimeoutException) {
             // Timeout → Render se réveille ou réseau lent
-            lastError = "Le serveur repond lentement. Reessayez dans quelques secondes."
+            lastError = temporaryError
             return null
         } catch (e: java.net.ConnectException) {
-            lastError = "Impossible de se connecter au serveur."
+            lastError = temporaryError
             return null
         } catch (e: Exception) {
             lastError = classifyError(e)
@@ -254,16 +255,16 @@ class BackendApiClient {
 
     /** Classe les erreurs techniques en messages user-friendly */
     private fun classifyError(e: Exception): String = when {
-        e is UnknownHostException -> "Serveur inaccessible. Verifiez votre connexion internet."
-        e is java.net.SocketTimeoutException -> "Le serveur repond lentement. Reessayez dans quelques secondes."
-        e is java.net.ConnectException -> "Impossible de se connecter au serveur."
+        e is UnknownHostException -> temporaryError
+        e is java.net.SocketTimeoutException -> temporaryError
+        e is java.net.ConnectException -> temporaryError
         e.message?.contains("resolve host", ignoreCase = true) == true ->
-            "Serveur inaccessible. Verifiez votre connexion internet."
+            temporaryError
         e.message?.contains("BEGIN", ignoreCase = true) == true ||
         e.message?.contains("Json", ignoreCase = true) == true ->
-            "Format de donnees inattendu."
+            temporaryError
         e.message?.contains("SSL", ignoreCase = true) == true ->
-            "Erreur de securite de connexion."
-        else -> "Erreur de connexion. Reessayez."
+            temporaryError
+        else -> temporaryError
     }
 }
