@@ -1,7 +1,9 @@
 package com.cdmafrique.live.data.api
 
 import com.cdmafrique.live.BuildConfig
+import com.cdmafrique.live.data.model.RouteDiagnostic
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
@@ -118,6 +120,22 @@ class BackendApiClient {
         get("/articles")
     }
 
+    suspend fun getVideos(): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/videos")
+    }
+
+    suspend fun getGlobalInterviews(): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/interviews")
+    }
+
+    suspend fun getGlobalInjuries(): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/injuries")
+    }
+
+    suspend fun getGlobalTraining(): ContentListDto? = withContext(Dispatchers.IO) {
+        get("/training")
+    }
+
     // ── Trust / Reliability ─────────────────────────────────
 
     suspend fun getTrust(): Map<String, String> = withContext(Dispatchers.IO) {
@@ -148,6 +166,21 @@ class BackendApiClient {
 
     suspend fun checkHealth(): HealthDto? = withContext(Dispatchers.IO) {
         get("/diagnostic")
+    }
+
+    suspend fun checkDiagnosticRoutes(): List<RouteDiagnostic> = withContext(Dispatchers.IO) {
+        listOf(
+            "/health",
+            "/diagnostic",
+            "/matches/live",
+            "/matches/today",
+            "/matches/upcoming",
+            "/matches/standings",
+            "/articles",
+            "/interviews",
+            "/injuries",
+            "/training"
+        ).map { checkRoute(it) }
     }
 
     // ── Generic GET ─────────────────────────────────────────
@@ -251,6 +284,62 @@ class BackendApiClient {
             lastError = classifyError(e)
             return null
         }
+    }
+
+    private fun checkRoute(path: String): RouteDiagnostic {
+        return try {
+            val request = Request.Builder()
+                .url("$baseUrl$path")
+                .get()
+                .build()
+            apiCallCount++
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val count = countItems(body)
+                val renderRoute = path == "/health" || path == "/diagnostic"
+                RouteDiagnostic(
+                    path = path,
+                    ok = response.isSuccessful,
+                    httpCode = response.code,
+                    itemCount = count,
+                    sourceUsed = if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
+                    message = if (response.isSuccessful) null else temporaryError
+                )
+            }
+        } catch (e: Exception) {
+            RouteDiagnostic(
+                path = path,
+                ok = false,
+                httpCode = null,
+                itemCount = 0,
+                sourceUsed = "Local",
+                message = classifyError(e)
+            )
+        }
+    }
+
+    private fun countItems(body: String): Int {
+        if (body.isBlank()) return 0
+        val root = runCatching { JsonParser.parseString(body) }.getOrNull() ?: return 0
+        return countJsonItems(root)
+    }
+
+    private fun countJsonItems(element: JsonElement?): Int {
+        if (element == null || element.isJsonNull) return 0
+        if (element.isJsonArray) return element.asJsonArray.size()
+        if (!element.isJsonObject) return 1
+
+        val obj = element.asJsonObject
+        val data = obj.get("data")
+        if (data != null && !data.isJsonNull) return countJsonItems(data)
+
+        val items = obj.get("items")
+        if (items != null && !items.isJsonNull) return countJsonItems(items)
+
+        val groups = obj.get("groups")
+        if (groups != null && !groups.isJsonNull) return countJsonItems(groups)
+
+        return 1
     }
 
     /** Classe les erreurs techniques en messages user-friendly */

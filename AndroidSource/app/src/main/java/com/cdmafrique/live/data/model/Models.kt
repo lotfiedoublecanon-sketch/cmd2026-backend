@@ -232,7 +232,17 @@ data class AppDiagnostic(
     val backendVersion: String?,
     val apiCallCount: Int,
     val lastError: String?,
-    val appVersion: String
+    val appVersion: String,
+    val routes: List<RouteDiagnostic> = emptyList()
+)
+
+data class RouteDiagnostic(
+    val path: String,
+    val ok: Boolean,
+    val httpCode: Int?,
+    val itemCount: Int,
+    val sourceUsed: String,
+    val message: String? = null
 )
 
 // ── Article ─────────────────────────────────────────────────

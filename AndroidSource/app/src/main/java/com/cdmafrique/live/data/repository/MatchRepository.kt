@@ -148,10 +148,39 @@ class MatchRepository(
         Result.failure(Exception(userFriendlyMessage(e)))
     }
 
+    suspend fun getVideos(): Result<List<ContentResult>> = try {
+        val dto = api.getVideos()
+        Result.success(dto?.items?.map { it.toDomain() } ?: emptyList())
+    } catch (e: Exception) {
+        Result.failure(Exception(userFriendlyMessage(e)))
+    }
+
+    suspend fun getGlobalInterviews(): Result<List<ContentResult>> = try {
+        val dto = api.getGlobalInterviews()
+        Result.success(dto?.items?.map { it.toDomain() } ?: emptyList())
+    } catch (e: Exception) {
+        Result.failure(Exception(userFriendlyMessage(e)))
+    }
+
+    suspend fun getGlobalInjuries(): Result<List<ContentResult>> = try {
+        val dto = api.getGlobalInjuries()
+        Result.success(dto?.items?.map { it.toDomain() } ?: emptyList())
+    } catch (e: Exception) {
+        Result.failure(Exception(userFriendlyMessage(e)))
+    }
+
+    suspend fun getGlobalTraining(): Result<List<ContentResult>> = try {
+        val dto = api.getGlobalTraining()
+        Result.success(dto?.items?.map { it.toDomain() } ?: emptyList())
+    } catch (e: Exception) {
+        Result.failure(Exception(userFriendlyMessage(e)))
+    }
+
     // ── Health / Diagnostic ─────────────────────────────────
 
     suspend fun getDiagnostic(): AppDiagnostic = try {
         val health = api.checkHealth()
+        val routes = api.checkDiagnosticRoutes()
         if (health != null) {
             AppDiagnostic(
                 backendStatus = health.status,
@@ -159,7 +188,8 @@ class MatchRepository(
                 backendVersion = health.version,
                 apiCallCount = api.apiCallCount,
                 lastError = api.lastError,
-                appVersion = BuildConfig.VERSION_NAME
+                appVersion = BuildConfig.VERSION_NAME,
+                routes = routes
             )
         } else {
             AppDiagnostic(
@@ -168,7 +198,8 @@ class MatchRepository(
                 backendVersion = null,
                 apiCallCount = api.apiCallCount,
                 lastError = api.lastError ?: temporaryError,
-                appVersion = BuildConfig.VERSION_NAME
+                appVersion = BuildConfig.VERSION_NAME,
+                routes = routes
             )
         }
     } catch (e: Exception) {
@@ -178,7 +209,8 @@ class MatchRepository(
             backendVersion = null,
             apiCallCount = api.apiCallCount,
             lastError = userFriendlyMessage(e),
-            appVersion = BuildConfig.VERSION_NAME
+            appVersion = BuildConfig.VERSION_NAME,
+            routes = emptyList()
         )
     }
 

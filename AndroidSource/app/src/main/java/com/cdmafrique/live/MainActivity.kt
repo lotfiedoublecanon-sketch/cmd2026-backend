@@ -698,6 +698,17 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
         title = "Architecture",
         body = "Render V5 + sources live cote serveur + IA interne + Firebase FCM."
     )
+    SectionTitle("Routes Render")
+    if (diag.routes.isEmpty()) {
+        EmptyState("Routes en cours de verification.", "Reessayer", onRetry)
+    } else {
+        diag.routes.forEach { route ->
+            InfoCard(
+                title = "${if (route.ok) "OK" else "Erreur"} ${route.path}",
+                body = "HTTP: ${route.httpCode ?: "-"}\nElements: ${route.itemCount}\nSource utilisee: ${route.sourceUsed}${route.message?.let { "\n$it" } ?: ""}"
+            )
+        }
+    }
     OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Rounded.Refresh, contentDescription = null)
         Spacer(Modifier.width(8.dp))

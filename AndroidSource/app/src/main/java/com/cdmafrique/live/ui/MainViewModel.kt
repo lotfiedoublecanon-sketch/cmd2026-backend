@@ -118,6 +118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             loadUpcomingMatches()
             loadStandings()
             loadArticles()
+            loadGlobalContent()
             _isLoading.value = false
         }
         startLivePolling()
@@ -131,19 +132,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadLiveMatches() {
         repository.getLiveMatches()
-            .onSuccess { _liveMatches.value = it }
-            .onFailure { /* Silencieux : pas de match live = normal */ }
+            .onSuccess { matches ->
+                _liveMatches.value = matches.ifEmpty {
+                    showLocalNotice()
+                    localFallback.liveMatches()
+                }
+            }
+            .onFailure {
+                showLocalNotice()
+                _liveMatches.value = localFallback.liveMatches()
+            }
         refreshCalendarFallback()
     }
 
     private suspend fun loadTodayMatches() {
         repository.getTodayMatches()
             .onSuccess { matches ->
-                _todayMatches.value = matches.ifEmpty { localFallback.todayMatches() }
+                _todayMatches.value = matches.ifEmpty {
+                    showLocalNotice()
+                    localFallback.todayMatches().ifEmpty { localFallback.upcomingMatches(7) }
+                }
             }
             .onFailure {
                 // Erreur réseau : utiliser le fallback local, pas d'erreur affichée
-                _todayMatches.value = localFallback.todayMatches()
+                showLocalNotice()
+                _todayMatches.value = localFallback.todayMatches().ifEmpty { localFallback.upcomingMatches(7) }
             }
         refreshCalendarFallback()
     }
@@ -151,9 +164,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadUpcomingMatches() {
         repository.getUpcomingMatches()
             .onSuccess { matches ->
-                _upcomingMatches.value = matches.ifEmpty { localFallback.upcomingMatches(30) }
+                _upcomingMatches.value = matches.ifEmpty {
+                    showLocalNotice()
+                    localFallback.upcomingMatches(30)
+                }
             }
             .onFailure {
+                showLocalNotice()
                 _upcomingMatches.value = localFallback.upcomingMatches(30)
             }
         refreshCalendarFallback()
@@ -174,9 +191,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.getStandings()
                 .onSuccess { groups ->
-                    _standings.value = groups.ifEmpty { localFallback.standings() }
+                    _standings.value = groups.ifEmpty {
+                        showLocalNotice()
+                        localFallback.standings()
+                    }
                 }
                 .onFailure {
+                    showLocalNotice()
                     _standings.value = localFallback.standings()
                 }
         }
@@ -186,12 +207,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.getArticles()
                 .onSuccess { items ->
-                    _articles.value = items.ifEmpty { localFallback.fallbackArticles() }
+                    _articles.value = items.ifEmpty {
+                        showLocalNotice()
+                        localFallback.fallbackArticles()
+                    }
                 }
                 .onFailure {
+                    showLocalNotice()
                     _articles.value = localFallback.fallbackArticles()
                 }
         }
+    }
+
+    private suspend fun loadGlobalContent() {
+        repository.getVideos()
+            .onSuccess { items -> _mediaContent.value = items.ifEmpty { showLocalNotice(); localFallback.mediaContent() } }
+            .onFailure { showLocalNotice(); _mediaContent.value = localFallback.mediaContent() }
+
+        repository.getGlobalInjuries()
+            .onSuccess { items -> _injuriesContent.value = items.ifEmpty { showLocalNotice(); localFallback.injuriesContent() } }
+            .onFailure { showLocalNotice(); _injuriesContent.value = localFallback.injuriesContent() }
+
+        repository.getGlobalInterviews()
+            .onSuccess { items -> _interviewsContent.value = items.ifEmpty { showLocalNotice(); localFallback.interviewsContent() } }
+            .onFailure { showLocalNotice(); _interviewsContent.value = localFallback.interviewsContent() }
+
+        repository.getGlobalTraining()
+            .onSuccess { items -> _trainingContent.value = items.ifEmpty { showLocalNotice(); localFallback.trainingContent() } }
+            .onFailure { showLocalNotice(); _trainingContent.value = localFallback.trainingContent() }
+    }
+
+    private fun showLocalNotice() {
+        _error.value = localFallback.localNotice()
     }
 
     // ── Polling ─────────────────────────────────────────────
@@ -249,7 +296,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _interviewsContent.value = emptyList()
         _trainingContent.value = emptyList()
 
-        if (!match.id.startsWith("local-")) {
+        if (match.id.startsWith("local-")) {
+            loadLocalMatchDetails(match)
+        } else {
             viewModelScope.launch {
                 loadMatchDetails(match.id)
             }
@@ -257,17 +306,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadMatchDetails(matchId: String) {
+        val currentMatch = _selectedMatch.value
         // Load events — silencieux si erreur
         repository.getMatchEvents(matchId)
-            .onSuccess { _matchEvents.value = it }
+            .onSuccess { events -> _matchEvents.value = events.ifEmpty { localEventsFor(currentMatch) } }
 
         // Load stats — null si indisponible, c'est normal
         repository.getMatchStats(matchId)
-            .onSuccess { _matchStats.value = it }
+            .onSuccess { stats -> _matchStats.value = stats ?: currentMatch?.let { localFallback.matchStats(matchId, it) } }
 
         // Load lineups — null si indisponible, c'est normal
         repository.getMatchLineups(matchId)
-            .onSuccess { _matchLineups.value = it }
+            .onSuccess { lineups -> _matchLineups.value = lineups ?: currentMatch?.let { localFallback.lineups(matchId, it) } }
 
         // Load analysis — null si Gemini indisponible
         repository.getAnalysis(matchId)
@@ -275,30 +325,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // Load prediction — null si indisponible
         repository.getPrediction(matchId)
-            .onSuccess { _prediction.value = it }
+            .onSuccess { prediction -> _prediction.value = prediction ?: currentMatch?.let { localFallback.prediction(matchId, it) } }
 
         // Load commentary — vide si indisponible
         repository.getCommentary(matchId)
-            .onSuccess { _commentary.value = it }
+            .onSuccess { items -> _commentary.value = items.ifEmpty { currentMatch?.let { localFallback.commentary(it) } ?: emptyList() } }
 
         // Load content tabs — vides si indisponibles
         repository.getMedia(matchId)
-            .onSuccess { _mediaContent.value = it }
+            .onSuccess { _mediaContent.value = it.ifEmpty { localFallback.mediaContent() } }
 
         repository.getInjuries(matchId)
-            .onSuccess { _injuriesContent.value = it }
+            .onSuccess { _injuriesContent.value = it.ifEmpty { localFallback.injuriesContent() } }
 
         repository.getInterviews(matchId)
-            .onSuccess { _interviewsContent.value = it }
+            .onSuccess { _interviewsContent.value = it.ifEmpty { localFallback.interviewsContent() } }
 
         repository.getTraining(matchId)
-            .onSuccess { _trainingContent.value = it }
+            .onSuccess { _trainingContent.value = it.ifEmpty { localFallback.trainingContent() } }
     }
 
     fun refreshMatchDetail() {
         val matchId = _selectedMatch.value?.id ?: return
+        val match = _selectedMatch.value
+        if (match?.id?.startsWith("local-") == true) {
+            loadLocalMatchDetails(match)
+            return
+        }
         viewModelScope.launch {
             loadMatchDetails(matchId)
+        }
+    }
+
+    private fun loadLocalMatchDetails(match: Match) {
+        val matchId = match.id.removePrefix("local-")
+        _matchStats.value = localFallback.matchStats(matchId, match)
+        _matchLineups.value = localFallback.lineups(matchId, match)
+        _prediction.value = localFallback.prediction(matchId, match)
+        _commentary.value = localFallback.commentary(match)
+        _mediaContent.value = localFallback.mediaContent()
+        _injuriesContent.value = localFallback.injuriesContent()
+        _interviewsContent.value = localFallback.interviewsContent()
+        _trainingContent.value = localFallback.trainingContent()
+        _matchEvents.value = localEventsFor(match)
+    }
+
+    private fun localEventsFor(match: Match?): List<MatchEvent> {
+        if (match == null) return emptyList()
+        return localFallback.commentary(match).mapIndexed { index, item ->
+            MatchEvent("local-event-$index", match.id, EventType.UNKNOWN, item.minute, null, null, null, null, item.text)
         }
     }
 

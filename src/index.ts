@@ -98,6 +98,11 @@ app.get('/diagnostic', (req, res) => {
       'GET /matches/today',
       'GET /matches/upcoming',
       'GET /matches/standings',
+      'GET /articles',
+      'GET /videos',
+      'GET /interviews',
+      'GET /injuries',
+      'GET /training',
       'GET /diagnostic',
     ],
   });
@@ -208,6 +213,106 @@ app.get('/videos', async (req, res) => {
   }
 });
 
+app.get('/interviews', async (req, res) => {
+  try {
+    const result = await agentOrchestrator.runAgent('InterviewAgent', {
+      playerName: 'un joueur africain a suivre',
+      occasion: 'avant la Coupe du Monde 2026',
+      message: 'Prepare un court point interviews sans inventer de citation directe.',
+    });
+    res.json({
+      items: [
+        {
+          title: 'Interviews CDM 2026',
+          content: result.content,
+          reliability: result.reliability,
+          updatedAt: result.timestamp,
+          source: 'InterviewAgent + Gemini',
+          sources: result.sources,
+        },
+      ],
+    });
+  } catch {
+    res.json({
+      items: [
+        {
+          title: 'Interviews',
+          content: 'Aucune interview officielle disponible pour le moment. Les donnees locales restent affichees dans Android.',
+          reliability: 'unconfirmed',
+          updatedAt: new Date().toISOString(),
+          source: 'Backend V5',
+        },
+      ],
+    });
+  }
+});
+
+app.get('/injuries', async (req, res) => {
+  try {
+    const result = await agentOrchestrator.runAgent('InjuryAgent', {
+      teamName: 'equipes africaines et favoris CDM 2026',
+      message: 'Prepare un etat blessures prudent sans affirmer de blessure non confirmee.',
+    });
+    res.json({
+      items: [
+        {
+          title: 'Blessures CDM 2026',
+          content: result.content,
+          reliability: result.reliability,
+          updatedAt: result.timestamp,
+          source: 'InjuryAgent + Gemini',
+          sources: result.sources,
+        },
+      ],
+    });
+  } catch {
+    res.json({
+      items: [
+        {
+          title: 'Blessures',
+          content: 'Aucune blessure confirmee par les sources serveur pour le moment.',
+          reliability: 'unconfirmed',
+          updatedAt: new Date().toISOString(),
+          source: 'Backend V5',
+        },
+      ],
+    });
+  }
+});
+
+app.get('/training', async (req, res) => {
+  try {
+    const result = await agentOrchestrator.runAgent('TrainingAgent', {
+      teamName: 'equipes africaines CDM 2026',
+      message: 'Prepare un point entrainement prudent et utile.',
+    });
+    res.json({
+      items: [
+        {
+          title: 'Entrainements CDM 2026',
+          content: result.content,
+          reliability: result.reliability,
+          updatedAt: result.timestamp,
+          source: 'TrainingAgent + Gemini',
+          sources: result.sources,
+        },
+      ],
+    });
+  } catch {
+    res.json({
+      items: [
+        {
+          title: 'Entrainements',
+          content: 'Aucun rapport entrainement serveur disponible pour le moment. Les donnees locales restent affichees dans Android.',
+          reliability: 'unconfirmed',
+          updatedAt: new Date().toISOString(),
+          source: 'Backend V5',
+        },
+      ],
+    });
+  }
+});
+
 app.get('/trust', (req, res) => {
   res.json({
     primary: 'FAPI/TheStatsAPI',
@@ -257,6 +362,11 @@ app.get('/', (req, res) => {
       diagnostic: {
         'GET /health': 'Minimal health check',
         'GET /diagnostic': 'Safe deployment diagnostic without secrets',
+        'GET /articles': 'Global articles feed',
+        'GET /videos': 'Global videos/media feed',
+        'GET /interviews': 'Global interviews feed',
+        'GET /injuries': 'Global injuries feed',
+        'GET /training': 'Global training feed',
       },
     },
     sources: {
