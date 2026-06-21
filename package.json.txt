@@ -1,0 +1,36 @@
+// ORIGINAL_PATH: package.json
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
+{
+  "name": "cdm2026-live-backend",
+  "version": "5.0.0",
+  "description": "Backend CDM 2026 Live by Redha - FAPI primary + SportDB fallback",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.2.0",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "winston": "^3.13.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.14.9",
+    "@types/node-cron": "^3.0.11",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.2"
+  }
+}

@@ -1,0 +1,23 @@
+// ORIGINAL_PATH: tsconfig.json
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

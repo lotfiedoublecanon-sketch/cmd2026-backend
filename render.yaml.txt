@@ -1,0 +1,46 @@
+// ORIGINAL_PATH: render.yaml
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
+services:
+  - type: web
+    name: cdm2026-backend-v5
+    runtime: node
+    rootDir: .
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: PORT
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: FAPI_API_KEY
+        sync: false
+      - key: THESTATSAPI_KEY
+        sync: false
+      - key: FAPI_BASE_URL
+        sync: false
+      - key: THESTATSAPI_BASE_URL
+        sync: false
+      - key: FAPI_COMPETITION_ID
+        sync: false
+      - key: WORLD_CUP_COMPETITION_ID
+        sync: false
+      - key: SPORTDB_API_KEY
+        sync: false
+      - key: SPORTDB_BASE_URL
+        sync: false
+      - key: SPORTDB_LEAGUE_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: FCM_ENABLED
+        sync: false
