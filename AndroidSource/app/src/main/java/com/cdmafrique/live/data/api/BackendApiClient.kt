@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
 class BackendApiClient {
 
     private val temporaryError = "Serveur temporairement indisponible, réessayez."
-    private val baseUrl: String = BuildConfig.BACKEND_URL
+    private val baseUrl: String = BuildConfig.BACKEND_URL.trim().removeSuffix("/")
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)   // Render cold start peut prendre 10-20s
@@ -117,7 +117,7 @@ class BackendApiClient {
     }
 
     suspend fun getArticles(): ArticleListDto? = withContext(Dispatchers.IO) {
-        get("/articles")
+        get("/news") ?: get("/articles")
     }
 
     suspend fun getVideos(): ContentListDto? = withContext(Dispatchers.IO) {
@@ -176,7 +176,9 @@ class BackendApiClient {
             "/matches/today",
             "/matches/upcoming",
             "/matches/standings",
+            "/news",
             "/articles",
+            "/videos",
             "/interviews",
             "/injuries",
             "/training"

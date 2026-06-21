@@ -116,11 +116,20 @@ data class StandingEntryDto(
 // ── Content DTOs (Media, Injuries, Interviews, Training) ────
 
 data class ContentResultDto(
-    val title: String,
-    val content: String,
-    val reliability: String = "unconfirmed",
+    val id: String? = null,
+    val title: String = "",
+    @SerializedName(value = "content", alternate = ["summary"])
+    val content: String? = null,
+    val summary: String? = null,
+    val url: String? = null,
+    val reliability: String? = null,
+    @SerializedName(value = "updatedAt", alternate = ["publishedAt"])
     val updatedAt: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    val sourceType: String? = null,
+    val category: String? = null,
+    val confidence: Double? = null,
+    val language: String? = null
 )
 
 data class ContentListDto(
@@ -201,13 +210,18 @@ data class ApiResponseDto<T>(
 // ── Articles DTOs ───────────────────────────────────────────
 
 data class ArticleDto(
-    val id: String,
-    val title: String,
+    val id: String = "",
+    val title: String = "",
     val summary: String? = null,
     val content: String? = null,
+    val url: String? = null,
     val imageUrl: String? = null,
     val publishedAt: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    val sourceType: String? = null,
+    val category: String? = null,
+    val confidence: Double? = null,
+    val language: String? = null
 )
 
 data class ArticleListDto(

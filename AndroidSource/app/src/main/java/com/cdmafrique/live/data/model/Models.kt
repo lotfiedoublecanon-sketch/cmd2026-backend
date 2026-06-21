@@ -346,11 +346,11 @@ fun StandingGroupDto.toDomain() = StandingGroup(
 )
 
 fun ContentResultDto.toDomain() = ContentResult(
-    title = title,
-    content = content,
-    reliability = Reliability.fromKey(reliability),
+    title = title.ifBlank { source ?: "Information" },
+    content = content ?: summary ?: url ?: "Aucune donnée source disponible pour le moment",
+    reliability = Reliability.fromKey(reliability ?: if ((confidence ?: 0.0) >= 0.8) "reliable" else "unconfirmed"),
     updatedAt = updatedAt,
-    source = source
+    source = source ?: sourceType
 )
 
 fun AnalysisDto.toDomain() = Analysis(
@@ -374,11 +374,11 @@ fun CommentaryItemDto.toDomain() = CommentaryItem(
 )
 
 fun ArticleDto.toDomain() = Article(
-    id = id,
-    title = title,
+    id = id.ifBlank { "${source.orEmpty()}-${title.hashCode()}" },
+    title = title.ifBlank { source ?: "Actualité" },
     summary = summary,
-    content = content,
+    content = content ?: summary ?: url,
     imageUrl = imageUrl,
     publishedAt = publishedAt,
-    source = source
+    source = source ?: sourceType
 )

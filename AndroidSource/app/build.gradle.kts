@@ -8,6 +8,7 @@ plugins {
 fun requiredBackendUrl(): String {
     val value = providers.gradleProperty("BACKEND_URL")
         .orElse(providers.environmentVariable("BACKEND_URL"))
+        .orElse("https://cmd2026-backend-1.onrender.com/")
         .orNull
         ?.trim()
         .orEmpty()
@@ -24,7 +25,7 @@ fun requiredBackendUrl(): String {
     ) {
         "BACKEND_URL must not be local, emulator-only, private LAN, or a known broken Render URL."
     }
-    return value.removeSuffix("/")
+    return value.removeSuffix("/") + "/"
 }
 
 android {
