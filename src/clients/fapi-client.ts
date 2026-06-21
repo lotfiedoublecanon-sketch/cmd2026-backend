@@ -15,6 +15,13 @@ dotenv.config();
 const FAPI_BASE_URL = readConfigValueOrDefault(['FAPI_BASE_URL', 'THESTATSAPI_BASE_URL'], 'https://api.thestatsapi.com/v2');
 const FAPI_API_KEY = readConfigValue('FAPI_API_KEY', 'THESTATSAPI_KEY');
 const FAPI_COMPETITION_ID = readConfigValueOrDefault(['FAPI_COMPETITION_ID', 'WORLD_CUP_COMPETITION_ID'], 'comp_6107');
+const FAPI_COMPETITION_IDS = readConfigValueOrDefault(
+  ['FAPI_COMPETITION_IDS', 'THESTATSAPI_COMPETITION_IDS'],
+  FAPI_COMPETITION_ID
+)
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean);
 const FAPI_TIMEOUT = parseInt(process.env.FAPI_TIMEOUT_MS || '8000', 10);
 
 class FapiClient {
@@ -73,14 +80,40 @@ class FapiClient {
   // ---- Competition & Matches ----
 
   async getLiveMatches(): Promise<NormalizedMatch[]> {
-    try {
-      const data = await this.request<any>('GET', `/competitions/${FAPI_COMPETITION_ID}/matches`, { live: true }, 10);
-      const matches = this.extractMatches(data);
-      return matches.filter(m => m.isInProgress);
-    } catch {
-      // Fallback: get today's matches and filter
-      return this.getTodayMatches().then(m => m.filter(m2 => m2.isInProgress));
+    const confirmedLive: NormalizedMatch[] = [];
+
+    for (const competitionId of this.getCompetitionIds()) {
+      try {
+        const data = await this.request<any>('GET', `/competitions/${competitionId}/matches`, { live: true }, 10);
+        confirmedLive.push(...this.extractMatches(data).filter(m => this.isReliableLiveMatch(m)));
+      } catch {
+        // Try the next configured World Cup competition id.
+      }
     }
+
+    if (confirmedLive.length > 0) return this.dedupeMatches(confirmedLive);
+
+    const genericAttempts = [
+      { path: '/matches/live', params: undefined },
+      { path: '/matches', params: { live: true } },
+    ];
+
+    for (const attempt of genericAttempts) {
+      try {
+        const data = await this.request<any>('GET', attempt.path, attempt.params, 10);
+        confirmedLive.push(
+          ...this.extractMatches(data)
+            .filter(m => this.isWorldCupMatch(m))
+            .filter(m => this.isReliableLiveMatch(m))
+        );
+      } catch {
+        // SportDB remains the fallback if generic FAPI live endpoints are unavailable.
+      }
+    }
+
+    if (confirmedLive.length > 0) return this.dedupeMatches(confirmedLive);
+
+    return this.getTodayMatches().then(m => this.dedupeMatches(m.filter(m2 => this.isReliableLiveMatch(m2))));
   }
 
   async getTodayMatches(): Promise<NormalizedMatch[]> {
@@ -170,9 +203,60 @@ class FapiClient {
   // ========== NORMALIZATION ==========
 
   private extractMatches(response: any): NormalizedMatch[] {
-    const items = response?.data || response?.matches || response?.results || [];
+    const items = response?.data || response?.matches || response?.results || response?.items || [];
     if (!Array.isArray(items)) return [];
     return items.map(m => this.normalizeMatch(m)).filter(Boolean) as NormalizedMatch[];
+  }
+
+  private getCompetitionIds(): string[] {
+    return Array.from(new Set(FAPI_COMPETITION_IDS.length > 0 ? FAPI_COMPETITION_IDS : [FAPI_COMPETITION_ID]));
+  }
+
+  private isReliableLiveMatch(match: NormalizedMatch): boolean {
+    return match.isInProgress && ['in_progress', 'halftime', 'extra_time', 'penalties'].includes(match.status);
+  }
+
+  private isWorldCupMatch(match: NormalizedMatch): boolean {
+    const text = [
+      match.competitionId,
+      match.competitionName,
+      match.seasonName,
+      match.stage,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (text.includes('club world cup') || text.includes('women')) return false;
+
+    return this.getCompetitionIds().includes(match.competitionId) || [
+      'fifa world cup',
+      'world cup 2026',
+      'coupe du monde',
+      'coupe du monde 2026',
+      'canada mexico usa 2026',
+    ].some((term) => text.includes(term));
+  }
+
+  private dedupeMatches(matches: NormalizedMatch[]): NormalizedMatch[] {
+    const byKey = new Map<string, NormalizedMatch>();
+
+    for (const match of matches) {
+      const key = [
+        match.id,
+        match.homeTeam.name.toLowerCase(),
+        match.awayTeam.name.toLowerCase(),
+        match.startDateTimeUtc,
+      ].filter(Boolean).join('|');
+
+      if (!byKey.has(key)) byKey.set(key, match);
+    }
+
+    return Array.from(byKey.values()).sort((a, b) => {
+      const aTime = new Date(a.startDateTimeUtc).getTime();
+      const bTime = new Date(b.startDateTimeUtc).getTime();
+      return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+    });
   }
 
   private normalizeMatch(raw: any): NormalizedMatch | null {

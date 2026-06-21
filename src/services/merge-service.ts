@@ -32,7 +32,7 @@ class MergeService {
       console.warn('[Merge] SportDB live also failed:', (e as Error).message);
     }
 
-    return { success: true, data: [], source: 'fapi' };
+    return { success: true, data: [], source: 'backend' };
   }
 
   /**

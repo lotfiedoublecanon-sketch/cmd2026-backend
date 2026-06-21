@@ -70,8 +70,10 @@ export interface NormalizedMatch {
   period?: MatchPeriod;
   minute?: number;
   startDateTimeUtc: string;
-  homeScore: number;
-  awayScore: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeScorePenalty?: number;
+  awayScorePenalty?: number;
   isFinished: boolean;
   isInProgress: boolean;
   venue?: string;
@@ -143,4 +145,37 @@ export interface StandingEntry {
   points: number;
   group?: string;
   form?: string;
+}
+
+// ---- API Response Envelope ----
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  source: 'fapi' | 'sportdb' | 'merged' | 'cache' | 'backend';
+  sourceUsed?: string;
+  cachedAt?: string;
+  updatedAt?: string;
+  error?: string;
+}
+
+// ---- Gemini / Agents ----
+
+export type GeminiAgentType = 'commentator' | 'analyst' | 'predictor' | 'journalist';
+
+export interface GeminiResponse {
+  agent: GeminiAgentType;
+  content: string;
+  matchId?: string;
+  timestamp: string;
+}
+
+// ---- Notifications ----
+
+export interface NotificationPayload {
+  title: string;
+  body: string;
+  type: string;
+  matchId?: string;
+  data?: Record<string, string>;
 }

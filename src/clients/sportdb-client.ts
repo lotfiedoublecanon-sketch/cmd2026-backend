@@ -15,6 +15,13 @@ dotenv.config();
 const SPORTDB_BASE_URL = readConfigValueOrDefault(['SPORTDB_BASE_URL'], 'https://www.thesportsdb.com/api/v1/json');
 const SPORTDB_API_KEY = readConfigValue('SPORTDB_API_KEY');
 const SPORTDB_LEAGUE_ID = readConfigValueOrDefault(['SPORTDB_LEAGUE_ID'], '4636');
+const SPORTDB_LEAGUE_NAMES = readConfigValueOrDefault(
+  ['SPORTDB_LEAGUE_NAMES'],
+  'FIFA World Cup,World Cup,Coupe du Monde 2026'
+)
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean);
 const SPORTDB_TIMEOUT = parseInt(process.env.SPORTDB_TIMEOUT_MS || '8000', 10);
 
 class SportDbClient {
@@ -61,16 +68,33 @@ class SportDbClient {
   // ---- Matches ----
 
   async getLiveMatches(): Promise<NormalizedMatch[]> {
-    try {
-      // SportDB: eventsday with l=soccer for today
-      const today = new Date().toISOString().split('T')[0];
-      const data = await this.request<any>(`/eventsday.php?d=${today}&l=${SPORTDB_LEAGUE_ID}&s=Soccer`, 10);
-      const events = data?.events || [];
-      if (!Array.isArray(events)) return [];
-      return events.filter((e: any) => this.isLive(e)).map((e: any) => this.normalizeMatch(e));
-    } catch {
-      return [];
+    const today = new Date().toISOString().split('T')[0];
+    const paths = [
+      '/eventslive.php?s=Soccer',
+      `/eventsday.php?d=${today}&s=Soccer`,
+      ...SPORTDB_LEAGUE_NAMES.map((leagueName) => (
+        `/eventsday.php?d=${today}&l=${encodeURIComponent(leagueName)}&s=Soccer`
+      )),
+      `/eventsday.php?d=${today}&l=${SPORTDB_LEAGUE_ID}&s=Soccer`,
+    ];
+
+    const confirmedLive: NormalizedMatch[] = [];
+
+    for (const path of paths) {
+      try {
+        const data = await this.request<any>(path, 10);
+        const events = this.extractEvents(data);
+        const matches = events
+          .filter((event: any) => this.isWorldCupEvent(event))
+          .filter((event: any) => this.isLive(event))
+          .map((event: any) => this.normalizeMatch(event));
+        confirmedLive.push(...matches);
+      } catch {
+        // Continue to the next SportDB live strategy.
+      }
     }
+
+    return this.dedupeMatches(confirmedLive);
   }
 
   async getTodayMatches(): Promise<NormalizedMatch[]> {
@@ -203,18 +227,107 @@ class SportDbClient {
 
   // ========== INTERNALS ==========
 
+  private extractEvents(data: any): any[] {
+    const candidates = [
+      data?.events,
+      data?.event,
+      data?.data,
+      data?.results,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+    }
+
+    return [];
+  }
+
   private isLive(event: any): boolean {
-    const status = (event.strStatus || event.eventStage || '').toLowerCase();
+    const status = String(event.strStatus || event.eventStage || event.strProgress || '').toLowerCase().trim();
     // SportDB live indicators
-    if (['1', '2', '3', 'ht', 'et', 'p', 'live', 'in_progress', '1h', '2h'].includes(status)) return true;
-    if (event.intHomeScore !== null && event.intAwayScore !== null && event.intProgress) return true;
+    if ([
+      '1',
+      '2',
+      '3',
+      'ht',
+      'et',
+      'p',
+      'live',
+      'in_progress',
+      'in progress',
+      'match in progress',
+      '1h',
+      '2h',
+      'first half',
+      'second half',
+      '1st half',
+      '2nd half',
+    ].includes(status)) return true;
+
+    const progress = parseInt(event.intProgress || event.strProgress || '', 10);
+    if (Number.isFinite(progress) && progress > 0) return true;
+
     return false;
+  }
+
+  private isWorldCupEvent(event: any): boolean {
+    const idLeague = String(event.idLeague || '');
+    if (idLeague && idLeague === SPORTDB_LEAGUE_ID) return true;
+
+    const text = [
+      event.strLeague,
+      event.strEvent,
+      event.strEventAlternate,
+      event.strTournament,
+      event.strSeason,
+      event.strStage,
+      event.strGroup,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (!text) return false;
+    if (text.includes('club world cup') || text.includes('women')) return false;
+
+    return [
+      'fifa world cup',
+      'world cup 2026',
+      'coupe du monde',
+      'coupe du monde 2026',
+      'canada mexico usa 2026',
+    ].some((term) => text.includes(term));
+  }
+
+  private dedupeMatches(matches: NormalizedMatch[]): NormalizedMatch[] {
+    const byKey = new Map<string, NormalizedMatch>();
+
+    for (const match of matches) {
+      const key = [
+        match.id,
+        match.homeTeam.name.toLowerCase(),
+        match.awayTeam.name.toLowerCase(),
+        match.startDateTimeUtc,
+      ].filter(Boolean).join('|');
+
+      if (!byKey.has(key)) byKey.set(key, match);
+    }
+
+    return Array.from(byKey.values()).sort((a, b) => {
+      const aTime = new Date(a.startDateTimeUtc).getTime();
+      const bTime = new Date(b.startDateTimeUtc).getTime();
+      return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+    });
   }
 
   private normalizeMatch(raw: any): NormalizedMatch {
     const status = this.mapSportDbStatus(raw);
-    const homeScore = parseInt(raw.intHomeScore || '0', 10) || 0;
-    const awayScore = parseInt(raw.intAwayScore || '0', 10) || 0;
+    const homeScore = raw.intHomeScore === null || raw.intHomeScore === undefined || raw.intHomeScore === ''
+      ? null
+      : parseInt(raw.intHomeScore, 10);
+    const awayScore = raw.intAwayScore === null || raw.intAwayScore === undefined || raw.intAwayScore === ''
+      ? null
+      : parseInt(raw.intAwayScore, 10);
 
     return {
       id: raw.idEvent || raw.idMatch || '',

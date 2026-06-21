@@ -56,6 +56,7 @@ router.get('/live', async (req: Request, res: Response) => {
     const result = await mergeService.getLiveMatches();
     const response: ApiResponse<NormalizedMatch[]> = {
       ...result,
+      sourceUsed: result.source,
       cachedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -63,7 +64,8 @@ router.get('/live', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       data: [],
-      source: 'fapi',
+      source: 'backend',
+      sourceUsed: 'backend',
       error: (error as Error).message,
     });
   }
@@ -78,6 +80,7 @@ router.get('/today', async (req: Request, res: Response) => {
     const result = await mergeService.getTodayMatches();
     const response: ApiResponse<NormalizedMatch[]> = {
       ...result,
+      sourceUsed: result.source,
       cachedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -85,7 +88,8 @@ router.get('/today', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       data: [],
-      source: 'fapi',
+      source: 'backend',
+      sourceUsed: 'backend',
       error: (error as Error).message,
     });
   }
@@ -101,6 +105,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     const result = await mergeService.getUpcomingMatches(days);
     const response: ApiResponse<NormalizedMatch[]> = {
       ...result,
+      sourceUsed: result.source,
       cachedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -108,7 +113,8 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       data: [],
-      source: 'fapi',
+      source: 'backend',
+      sourceUsed: 'backend',
       error: (error as Error).message,
     });
   }
@@ -124,6 +130,7 @@ router.get('/standings', async (req: Request, res: Response) => {
     const response = {
       ...result,
       data: { groups: standingsAsGroups(result.data) },
+      sourceUsed: result.source,
       cachedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -131,7 +138,8 @@ router.get('/standings', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       data: { groups: [] },
-      source: 'fapi',
+      source: 'backend',
+      sourceUsed: 'backend',
       error: (error as Error).message,
     });
   }
