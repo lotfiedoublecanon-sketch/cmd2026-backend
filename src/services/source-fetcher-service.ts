@@ -3,7 +3,7 @@
 // Data aggregation from multiple sources
 // ============================================
 import { fapiClient } from '../clients/fapi-client';
-import { sportdbClient } from '../clients/sportdb-client';
+import { sportDbClient } from '../clients/sportdb-client';
 import { getEnabledSources } from '../config/open-sources';
 
 export interface FetchResult<T> {
@@ -72,7 +72,7 @@ class SourceFetcherService {
   async getLiveMatches(): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getLiveMatches(),
-      () => sportdbClient.getLiveMatches(),
+      () => sportDbClient.getLiveMatches(),
       'live matches'
     );
   }
@@ -83,7 +83,7 @@ class SourceFetcherService {
   async getTodayMatches(): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getTodayMatches(),
-      () => sportdbClient.getTodayMatches(),
+      () => sportDbClient.getTodayMatches(),
       'today matches'
     );
   }
@@ -94,7 +94,7 @@ class SourceFetcherService {
   async getUpcomingMatches(days = 7): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getUpcomingMatches(days),
-      () => sportdbClient.getUpcomingMatches(days),
+      () => sportDbClient.getUpcomingMatches(days),
       'upcoming matches'
     );
   }
@@ -105,7 +105,7 @@ class SourceFetcherService {
   async getMatchById(matchId: string): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getMatchById(matchId),
-      () => sportdbClient.getMatchById(matchId),
+      () => sportDbClient.getMatchById(matchId),
       `match ${matchId}`
     );
   }
@@ -116,7 +116,7 @@ class SourceFetcherService {
   async getMatchEvents(matchId: string): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getMatchEvents(matchId),
-      () => sportdbClient.getMatchEvents(matchId),
+      () => sportDbClient.getMatchEvents(matchId),
       `events for match ${matchId}`
     );
   }
@@ -127,7 +127,7 @@ class SourceFetcherService {
   async getMatchStats(matchId: string): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getMatchStats(matchId),
-      () => sportdbClient.getMatchStats(matchId),
+      () => sportDbClient.getMatchStats(matchId),
       `stats for match ${matchId}`
     );
   }
@@ -138,7 +138,7 @@ class SourceFetcherService {
   async getMatchLineups(matchId: string): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getMatchLineups(matchId),
-      () => sportdbClient.getMatchLineups(matchId),
+      () => sportDbClient.getMatchLineups(matchId),
       `lineups for match ${matchId}`
     );
   }
@@ -149,7 +149,7 @@ class SourceFetcherService {
   async getStandings(): Promise<FetchResult<any>> {
     return this.fetchWithFallback(
       () => fapiClient.getStandings(),
-      () => sportdbClient.getStandings(),
+      () => sportDbClient.getStandings(),
       'standings'
     );
   }
