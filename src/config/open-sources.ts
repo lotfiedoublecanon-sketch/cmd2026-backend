@@ -1,3 +1,7 @@
+// ORIGINAL_PATH: src/config/open-sources.ts
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
 import axios from 'axios';
 import mediaSourcesConfig from './media_sources.json';
 
@@ -10,6 +14,7 @@ export interface PublicMediaSource {
   type: string;
   homepage: string;
   healthUrl?: string;
+  rss?: string;
   backendOnly?: boolean;
   note?: string;
   categories: string[];
@@ -55,7 +60,6 @@ function countItems(payload: unknown): number {
     const candidate = ['items', 'articles', 'results', 'data', 'events', 'matches']
       .map((key) => record[key])
       .find((value) => Array.isArray(value));
-
     if (Array.isArray(candidate)) return candidate.length;
     return Object.keys(record).length > 0 ? 1 : 0;
   }
@@ -79,7 +83,7 @@ export async function checkSourceHealth(source: PublicMediaSource): Promise<Sour
 
   try {
     const response = await axios.get(source.healthUrl || source.homepage, {
-      timeout: 6000,
+      timeout: 4000, // Reduced timeout for Render health checks
       maxRedirects: 3,
       headers: {
         'User-Agent': 'CDM2026LiveByRedha/5.0 source-health',
@@ -104,7 +108,6 @@ export async function checkSourceHealth(source: PublicMediaSource): Promise<Sour
   } catch (error) {
     const httpCode = axios.isAxiosError(error) ? error.response?.status : undefined;
     const message = error instanceof Error ? error.message : 'Source inaccessible';
-
     return {
       id: source.id,
       name: source.name,
@@ -119,5 +122,14 @@ export async function checkSourceHealth(source: PublicMediaSource): Promise<Sour
 }
 
 export async function checkSourcesHealth(): Promise<SourceHealthResult[]> {
-  return Promise.all(getAllSources().map((source) => checkSourceHealth(source)));
+  const results = await Promise.allSettled(getAllSources().map((source) => checkSourceHealth(source)));
+  return results.map(r => r.status === 'fulfilled' ? r.value : {
+    id: 'unknown',
+    name: 'unknown',
+    status: 'erreur' as SourceHealthStatus,
+    itemCount: 0,
+    lastCheck: new Date().toISOString(),
+    categories: [],
+    error: 'Promise rejected unexpectedly'
+  } as SourceHealthResult);
 }

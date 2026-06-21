@@ -1,5 +1,9 @@
+// ORIGINAL_PATH: src/services/source-fetcher-service.ts
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
 import axios from 'axios';
-import { getEnabledSources, PublicMediaSource, checkSourcesHealth } from '../config/open-sources';
+import { getEnabledSources, PublicMediaSource } from '../config/open-sources';
 
 type FeedCategory = 'articles' | 'news' | 'videos' | 'interviews' | 'injuries' | 'training';
 
@@ -26,7 +30,7 @@ export interface FetchFeedResult {
   sourceHealth: Array<{ id: string; name: string; status: string; itemCount: number; error?: string }>;
 }
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.SOURCE_FETCH_TIMEOUT_MS || 8000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.SOURCE_FETCH_TIMEOUT_MS || 4000);
 const MAX_PER_SOURCE = Number(process.env.SOURCE_MAX_PER_SOURCE || 6);
 const MAX_TOTAL = Number(process.env.SOURCE_MAX_TOTAL || 30);
 
@@ -180,26 +184,31 @@ function parseHtmlFallback(html: string, source: PublicMediaSource, category: Fe
 }
 
 async function fetchSource(source: PublicMediaSource, category: FeedCategory): Promise<NormalizedSourceItem[]> {
-  const url = sourceUrl(source, category);
-  const response = await axios.get(url, {
-    timeout: DEFAULT_TIMEOUT_MS,
-    maxRedirects: 3,
-    headers: {
-      'User-Agent': 'CDM2026LiveByRedha/5.0 source-fetcher',
-      Accept: 'application/rss+xml, application/xml, text/xml, application/json, text/html, text/plain',
-    },
-    validateStatus: (status) => status >= 200 && status < 400,
-  });
+  try {
+    const url = sourceUrl(source, category);
+    const response = await axios.get(url, {
+      timeout: DEFAULT_TIMEOUT_MS,
+      maxRedirects: 3,
+      headers: {
+        'User-Agent': 'CDM2026LiveByRedha/5.0 source-fetcher',
+        Accept: 'application/rss+xml, application/xml, text/xml, application/json, text/html, text/plain',
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
 
-  const contentType = String(response.headers['content-type'] || '').toLowerCase();
-  if (source.id === 'gdelt' || contentType.includes('json') || typeof response.data === 'object') {
-    return parseGdelt(response.data, source, category).filter((item) => matchesCategory(item, category));
+    const contentType = String(response.headers['content-type'] || '').toLowerCase();
+    if (source.id === 'gdelt' || contentType.includes('json') || typeof response.data === 'object') {
+      return parseGdelt(response.data, source, category).filter((item) => matchesCategory(item, category));
+    }
+    const text = String(response.data || '');
+    if (text.includes('<rss') || text.includes('<feed') || text.includes('<item') || text.includes('<entry')) {
+      return parseXmlFeed(text, source, category).filter((item) => matchesCategory(item, category));
+    }
+    return parseHtmlFallback(text, source, category).filter((item) => matchesCategory(item, category));
+  } catch (error) {
+    console.error(`[SourceFetcher] Erreur pour ${source.name} (${source.id}):`, error instanceof Error ? error.message : error);
+    throw error; // Re-throw to be caught by Promise.allSettled
   }
-  const text = String(response.data || '');
-  if (text.includes('<rss') || text.includes('<feed') || text.includes('<item') || text.includes('<entry')) {
-    return parseXmlFeed(text, source, category).filter((item) => matchesCategory(item, category));
-  }
-  return parseHtmlFallback(text, source, category).filter((item) => matchesCategory(item, category));
 }
 
 function dedupe(items: NormalizedSourceItem[]): NormalizedSourceItem[] {
@@ -226,21 +235,42 @@ function relevantSources(category: FeedCategory): PublicMediaSource[] {
 export class SourceFetcherService {
   async fetchCategory(category: FeedCategory): Promise<FetchFeedResult> {
     const sources = relevantSources(category);
+    // Run all fetches concurrently, catch individual errors
     const settled = await Promise.allSettled(sources.map((source) => fetchSource(source, category)));
-    const items = dedupe(settled.flatMap((result) => result.status === 'fulfilled' ? result.value : [])).slice(0, MAX_TOTAL);
-    const health = await checkSourcesHealth().catch(() => []);
+
+    const items: NormalizedSourceItem[] = [];
+    const sourceHealth: Array<{ id: string; name: string; status: string; itemCount: number; error?: string }> = [];
+
+    settled.forEach((result, index) => {
+      const source = sources[index];
+      if (result.status === 'fulfilled') {
+        items.push(...result.value);
+        sourceHealth.push({
+          id: source.id,
+          name: source.name,
+          status: 'OK',
+          itemCount: result.value.length,
+        });
+      } else {
+        const errorMessage = result.reason instanceof Error ? result.reason.message : 'Source inaccessible';
+        sourceHealth.push({
+          id: source.id,
+          name: source.name,
+          status: 'erreur',
+          itemCount: 0,
+          error: errorMessage,
+        });
+      }
+    });
+
+    const dedupedItems = dedupe(items).slice(0, MAX_TOTAL);
+
     return {
-      items,
-      message: items.length > 0 ? 'Données récupérées depuis les sources publiques.' : 'Aucune donnée source disponible pour le moment',
+      items: dedupedItems,
+      message: dedupedItems.length > 0 ? 'Données récupérées depuis les sources publiques.' : 'Aucune donnée source disponible pour le moment',
       generatedAt: new Date().toISOString(),
       sourceCount: sources.length,
-      sourceHealth: health.map((source) => ({
-        id: source.id,
-        name: source.name,
-        status: source.status,
-        itemCount: source.itemCount,
-        error: source.error,
-      })),
+      sourceHealth,
     };
   }
 

@@ -1,0 +1,22 @@
+PLACEMENT EXACT SUR GITHUB
+
+Ne mets pas les 3 fichiers à la racine.
+
+Les fichiers doivent remplacer exactement :
+
+src/index.ts
+src/config/open-sources.ts
+src/services/source-fetcher-service.ts
+
+Sur GitHub :
+1. Dézippe ce fichier sur ton PC.
+2. Upload le dossier src complet dans le repo.
+3. GitHub doit remplacer les 3 fichiers existants.
+4. Commit message conseillé :
+Fix source fetcher service and backend routes
+
+Ne modifie pas :
+package.json
+tsconfig.json
+render.yaml
+src/config/media_sources.json

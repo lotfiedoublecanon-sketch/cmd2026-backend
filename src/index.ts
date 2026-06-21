@@ -1,3 +1,7 @@
+// ORIGINAL_PATH: src/index.ts
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
 // ============================================
 // CDM 2026 Live Backend - Main Entry Point
 // ============================================
@@ -39,7 +43,8 @@ const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '300', 10);
 
 app.use((req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  // Fix: req.socket.remoteAddress is the modern Node.js way
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
 
@@ -130,12 +135,16 @@ app.get('/sources', (req, res) => {
 });
 
 app.get('/sources/health', async (req, res) => {
-  const sources = await checkSourcesHealth();
-  res.json({
-    success: true,
-    checkedAt: new Date().toISOString(),
-    sources,
-  });
+  try {
+    const sources = await checkSourcesHealth();
+    res.json({
+      success: true,
+      checkedAt: new Date().toISOString(),
+      sources,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to check sources health' });
+  }
 });
 
 function sendSourceFeed(res: express.Response, result: Awaited<ReturnType<typeof sourceFetcherService.fetchArticles>>) {
@@ -280,7 +289,7 @@ app.use((req, res) => {
 
 // ========== Error Handler ==========
 
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[Server] Unhandled error:', err);
   res.status(500).json({
     success: false,
