@@ -1,0 +1,285 @@
+// ORIGINAL_PATH: src/services/source-fetcher-service.ts
+// IMPORTANT: This file was renamed to .txt because Z.ai upload does not accept .ts/.json/.yaml.
+// If Z.ai modifies it, copy the corrected content back to the original path/name shown above.
+
+import axios from 'axios';
+import { getEnabledSources, PublicMediaSource } from '../config/open-sources';
+
+type FeedCategory = 'articles' | 'news' | 'videos' | 'interviews' | 'injuries' | 'training';
+
+export interface NormalizedSourceItem {
+  id: string;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  sourceId: string;
+  sourceType: string;
+  publishedAt: string;
+  category: FeedCategory;
+  team: string | null;
+  confidence: number;
+  language: string;
+}
+
+export interface FetchFeedResult {
+  items: NormalizedSourceItem[];
+  message: string;
+  generatedAt: string;
+  sourceCount: number;
+  sourceHealth: Array<{ id: string; name: string; status: string; itemCount: number; error?: string }>;
+}
+
+const DEFAULT_TIMEOUT_MS = Number(process.env.SOURCE_FETCH_TIMEOUT_MS || 4000);
+const MAX_PER_SOURCE = Number(process.env.SOURCE_MAX_PER_SOURCE || 6);
+const MAX_TOTAL = Number(process.env.SOURCE_MAX_TOTAL || 30);
+
+const CATEGORY_KEYWORDS: Record<FeedCategory, string[]> = {
+  articles: ['coupe du monde 2026', 'football', 'world cup 2026', 'fifa', 'algérie', 'algeria'],
+  news: ['coupe du monde 2026', 'football', 'world cup 2026', 'fifa', 'algérie', 'algeria'],
+  videos: ['video', 'vidéo', 'youtube', 'résumé', 'highlights', 'interview', 'conférence'],
+  interviews: ['interview', 'conférence', 'déclaration', 'reaction', 'réaction', 'press conference', 'zone mixte'],
+  injuries: ['blessure', 'blessé', 'forfait', 'incertain', 'suspendu', 'suspension', 'injury', 'injured', 'ruled out', 'red card', 'yellow card'],
+  training: ['entraînement', 'entrainement', 'séance', 'training', 'huis clos', 'préparation'],
+};
+
+function stripHtml(value: string): string {
+  return decodeEntities(value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+}
+
+function safeId(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120) || `item-${Date.now()}`;
+}
+
+function getTag(xml: string, tag: string): string {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
+  return stripHtml(re.exec(xml)?.[1] || '');
+}
+
+function getAttr(xml: string, tag: string, attr: string): string {
+  const re = new RegExp(`<${tag}[^>]*${attr}=["']([^"']+)["'][^>]*>`, 'i');
+  return decodeEntities(re.exec(xml)?.[1] || '');
+}
+
+function sourceUrl(source: PublicMediaSource, category: FeedCategory): string {
+  const anySource = source as PublicMediaSource & { rss?: string; url?: string };
+  if (anySource.rss) return anySource.rss;
+  if (source.id === 'google-news-rss') return googleNewsUrl(category);
+  if (source.id === 'gdelt') return gdeltUrl(category);
+  if (source.id === 'youtube') return source.healthUrl || source.homepage;
+  return source.healthUrl || anySource.url || source.homepage;
+}
+
+function googleNewsUrl(category: FeedCategory): string {
+  const query = encodeURIComponent(`${CATEGORY_KEYWORDS[category].slice(0, 4).join(' OR ')} football`);
+  return `https://news.google.com/rss/search?q=${query}&hl=fr&gl=FR&ceid=FR:fr`;
+}
+
+function gdeltUrl(category: FeedCategory): string {
+  const query = encodeURIComponent(CATEGORY_KEYWORDS[category].slice(0, 5).join(' '));
+  return `https://api.gdeltproject.org/api/v2/doc/doc?query=${query}&mode=artlist&format=json&maxrecords=20&sort=HybridRel`;
+}
+
+function confidenceForSource(source: PublicMediaSource): number {
+  if (source.type === 'official') return 100;
+  if (source.type === 'sports-data') return 90;
+  if (source.type === 'media') return 80;
+  if (source.type === 'aggregator' || source.type === 'open-data') return 70;
+  return 60;
+}
+
+function inferTeam(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (lower.includes('algérie') || lower.includes('algeria') || lower.includes('faf')) return 'Algeria';
+  if (lower.includes('france')) return 'France';
+  if (lower.includes('maroc') || lower.includes('morocco')) return 'Morocco';
+  if (lower.includes('tunisie') || lower.includes('tunisia')) return 'Tunisia';
+  if (lower.includes('sénégal') || lower.includes('senegal')) return 'Senegal';
+  return null;
+}
+
+function matchesCategory(item: Pick<NormalizedSourceItem, 'title' | 'summary'>, category: FeedCategory): boolean {
+  if (category === 'articles' || category === 'news') return true;
+  const haystack = `${item.title} ${item.summary}`.toLowerCase();
+  return CATEGORY_KEYWORDS[category].some((keyword) => haystack.includes(keyword.toLowerCase()));
+}
+
+function parseXmlFeed(xml: string, source: PublicMediaSource, category: FeedCategory): NormalizedSourceItem[] {
+  const blocks = xml.match(/<item[\s\S]*?<\/item>/gi) || xml.match(/<entry[\s\S]*?<\/entry>/gi) || [];
+  return blocks.slice(0, MAX_PER_SOURCE).map((block, index) => {
+    const title = getTag(block, 'title') || `${source.name} information`;
+    const summary = getTag(block, 'description') || getTag(block, 'summary') || getTag(block, 'content') || title;
+    const link = getTag(block, 'link') || getAttr(block, 'link', 'href') || source.homepage;
+    const publishedAt = getTag(block, 'pubDate') || getTag(block, 'published') || getTag(block, 'updated') || new Date().toISOString();
+    return {
+      id: `${source.id}-${safeId(title)}-${index}`,
+      title,
+      summary,
+      url: link,
+      source: source.name,
+      sourceId: source.id,
+      sourceType: source.type,
+      publishedAt: new Date(publishedAt).toString() === 'Invalid Date' ? new Date().toISOString() : new Date(publishedAt).toISOString(),
+      category,
+      team: inferTeam(`${title} ${summary}`),
+      confidence: confidenceForSource(source),
+      language: source.id.includes('google') || source.homepage.includes('.fr') || source.homepage.includes('faf') ? 'fr' : 'multi',
+    };
+  }).filter((item) => item.title && item.url);
+}
+
+function parseGdelt(payload: unknown, source: PublicMediaSource, category: FeedCategory): NormalizedSourceItem[] {
+  const articles = (payload as { articles?: Array<Record<string, unknown>> }).articles || [];
+  return articles.slice(0, MAX_PER_SOURCE).map((article, index) => {
+    const title = String(article.title || article.seendate || `${source.name} article`);
+    const url = String(article.url || source.homepage);
+    const summary = String(article.sourcecountry || article.domain || title);
+    const publishedAtRaw = String(article.seendate || new Date().toISOString());
+    return {
+      id: `${source.id}-${safeId(title)}-${index}`,
+      title,
+      summary,
+      url,
+      source: String(article.domain || source.name),
+      sourceId: source.id,
+      sourceType: source.type,
+      publishedAt: new Date(publishedAtRaw).toString() === 'Invalid Date' ? new Date().toISOString() : new Date(publishedAtRaw).toISOString(),
+      category,
+      team: inferTeam(`${title} ${summary}`),
+      confidence: confidenceForSource(source),
+      language: 'multi',
+    };
+  }).filter((item) => item.title && item.url);
+}
+
+function parseHtmlFallback(html: string, source: PublicMediaSource, category: FeedCategory): NormalizedSourceItem[] {
+  const title = stripHtml(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || source.name);
+  if (!title) return [];
+  return [{
+    id: `${source.id}-${safeId(title)}`,
+    title,
+    summary: `Source disponible : ${source.name}`,
+    url: source.homepage,
+    source: source.name,
+    sourceId: source.id,
+    sourceType: source.type,
+    publishedAt: new Date().toISOString(),
+    category,
+    team: inferTeam(title),
+    confidence: Math.max(40, confidenceForSource(source) - 20),
+    language: 'fr',
+  }];
+}
+
+async function fetchSource(source: PublicMediaSource, category: FeedCategory): Promise<NormalizedSourceItem[]> {
+  try {
+    const url = sourceUrl(source, category);
+    const response = await axios.get(url, {
+      timeout: DEFAULT_TIMEOUT_MS,
+      maxRedirects: 3,
+      headers: {
+        'User-Agent': 'CDM2026LiveByRedha/5.0 source-fetcher',
+        Accept: 'application/rss+xml, application/xml, text/xml, application/json, text/html, text/plain',
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+
+    const contentType = String(response.headers['content-type'] || '').toLowerCase();
+    if (source.id === 'gdelt' || contentType.includes('json') || typeof response.data === 'object') {
+      return parseGdelt(response.data, source, category).filter((item) => matchesCategory(item, category));
+    }
+    const text = String(response.data || '');
+    if (text.includes('<rss') || text.includes('<feed') || text.includes('<item') || text.includes('<entry')) {
+      return parseXmlFeed(text, source, category).filter((item) => matchesCategory(item, category));
+    }
+    return parseHtmlFallback(text, source, category).filter((item) => matchesCategory(item, category));
+  } catch (error) {
+    console.error(`[SourceFetcher] Erreur pour ${source.name} (${source.id}):`, error instanceof Error ? error.message : error);
+    throw error; // Re-throw to be caught by Promise.allSettled
+  }
+}
+
+function dedupe(items: NormalizedSourceItem[]): NormalizedSourceItem[] {
+  const seen = new Set<string>();
+  const output: NormalizedSourceItem[] = [];
+  for (const item of items) {
+    const key = `${item.url.toLowerCase()}|${item.title.toLowerCase().replace(/\s+/g, ' ').trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+  return output.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+}
+
+function relevantSources(category: FeedCategory): PublicMediaSource[] {
+  const keywords = CATEGORY_KEYWORDS[category].map((keyword) => keyword.toLowerCase());
+  return getEnabledSources().filter((source) => {
+    const categories = source.categories.map((cat) => cat.toLowerCase());
+    if (category === 'articles' || category === 'news') return categories.some((cat) => ['news', 'vidéos', 'interviews', 'blessures', 'entraînements', 'algérie'].includes(cat));
+    return categories.some((cat) => keywords.some((keyword) => cat.includes(keyword) || keyword.includes(cat)));
+  });
+}
+
+export class SourceFetcherService {
+  async fetchCategory(category: FeedCategory): Promise<FetchFeedResult> {
+    const sources = relevantSources(category);
+    // Run all fetches concurrently, catch individual errors
+    const settled = await Promise.allSettled(sources.map((source) => fetchSource(source, category)));
+
+    const items: NormalizedSourceItem[] = [];
+    const sourceHealth: Array<{ id: string; name: string; status: string; itemCount: number; error?: string }> = [];
+
+    settled.forEach((result, index) => {
+      const source = sources[index];
+      if (result.status === 'fulfilled') {
+        items.push(...result.value);
+        sourceHealth.push({
+          id: source.id,
+          name: source.name,
+          status: 'OK',
+          itemCount: result.value.length,
+        });
+      } else {
+        const errorMessage = result.reason instanceof Error ? result.reason.message : 'Source inaccessible';
+        sourceHealth.push({
+          id: source.id,
+          name: source.name,
+          status: 'erreur',
+          itemCount: 0,
+          error: errorMessage,
+        });
+      }
+    });
+
+    const dedupedItems = dedupe(items).slice(0, MAX_TOTAL);
+
+    return {
+      items: dedupedItems,
+      message: dedupedItems.length > 0 ? 'Données récupérées depuis les sources publiques.' : 'Aucune donnée source disponible pour le moment',
+      generatedAt: new Date().toISOString(),
+      sourceCount: sources.length,
+      sourceHealth,
+    };
+  }
+
+  fetchArticles() { return this.fetchCategory('articles'); }
+  fetchNews() { return this.fetchCategory('news'); }
+  fetchVideos() { return this.fetchCategory('videos'); }
+  fetchInterviews() { return this.fetchCategory('interviews'); }
+  fetchInjuries() { return this.fetchCategory('injuries'); }
+  fetchTraining() { return this.fetchCategory('training'); }
+}
+
+export const sourceFetcherService = new SourceFetcherService();
