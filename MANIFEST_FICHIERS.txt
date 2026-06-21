@@ -1,8 +1,0 @@
-files_txt/render.yaml.txt => render.yaml
-files_txt/package.json.txt => package.json
-files_txt/tsconfig.json.txt => tsconfig.json
-files_txt/src__index.ts.txt => src/index.ts
-files_txt/src__config__media_sources.json.txt => src/config/media_sources.json
-files_txt/src__config__open-sources.ts.txt => src/config/open-sources.ts
-files_txt/src__services__source-fetcher-service.ts.txt => src/services/source-fetcher-service.ts
-files_txt/README_ZAI_REDHA.md.txt => README_ZAI_REDHA.md
