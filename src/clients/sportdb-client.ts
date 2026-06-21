@@ -128,6 +128,31 @@ class SportDbClient {
     }
   }
 
+  // ---- Match Statistics ----
+
+  async getMatchStats(matchId: string): Promise<MatchStats | null> {
+    try {
+      const data = await this.request<any>(`/lookupevent.php?id=${matchId}`, 30);
+      const events = data?.events || [];
+      if (!Array.isArray(events) || events.length === 0) return null;
+      const match = events[0];
+      // SportDB doesn't provide detailed stats; return what's available from the event
+      const stats: Array<{ name: string; home: number; away: number }> = [];
+      if (match.intHomeShots !== null && match.intAwayShots !== null) {
+        stats.push({ name: 'Shots', home: parseInt(match.intHomeShots || '0', 10), away: parseInt(match.intAwayShots || '0', 10) });
+      }
+      if (match.intHomeYellowCards !== null && match.intAwayYellowCards !== null) {
+        stats.push({ name: 'Yellow Cards', home: parseInt(match.intHomeYellowCards || '0', 10), away: parseInt(match.intAwayYellowCards || '0', 10) });
+      }
+      if (match.intHomeRedCards !== null && match.intAwayRedCards !== null) {
+        stats.push({ name: 'Red Cards', home: parseInt(match.intHomeRedCards || '0', 10), away: parseInt(match.intAwayRedCards || '0', 10) });
+      }
+      return { matchId, stats };
+    } catch {
+      return null;
+    }
+  }
+
   // ---- Lineups ----
 
   async getMatchLineups(matchId: string): Promise<MatchLineups | null> {
