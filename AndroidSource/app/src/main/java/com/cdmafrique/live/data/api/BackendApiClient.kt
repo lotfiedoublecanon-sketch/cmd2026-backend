@@ -3,8 +3,10 @@ package com.cdmafrique.live.data.api
 import com.cdmafrique.live.BuildConfig
 import com.cdmafrique.live.data.model.RouteDiagnostic
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
@@ -57,7 +59,7 @@ class BackendApiClient {
     }
 
     suspend fun getUpcomingMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
-        get("/matches/upcoming?days=30") ?: emptyList()
+        get("/matches/upcoming?days=60") ?: emptyList()
     }
 
     suspend fun getMatchById(matchId: String): MatchDto? = withContext(Dispatchers.IO) {
@@ -117,7 +119,8 @@ class BackendApiClient {
     }
 
     suspend fun getArticles(): ArticleListDto? = withContext(Dispatchers.IO) {
-        get("/news") ?: get("/articles")
+        val news = get<ArticleListDto>("/news")
+        if (news != null && news.items.isNotEmpty()) news else get("/articles")
     }
 
     suspend fun getVideos(): ContentListDto? = withContext(Dispatchers.IO) {
@@ -174,14 +177,15 @@ class BackendApiClient {
             "/diagnostic",
             "/matches/live",
             "/matches/today",
-            "/matches/upcoming",
+            "/matches/upcoming?days=60",
             "/matches/standings",
             "/news",
             "/articles",
             "/videos",
             "/interviews",
             "/injuries",
-            "/training"
+            "/training",
+            "/sources"
         ).map { checkRoute(it) }
     }
 
@@ -204,18 +208,15 @@ class BackendApiClient {
             val body = response.body?.string()
 
             if (!response.isSuccessful || body == null) {
-                lastError = if (response.code == 503) {
-                    temporaryError
-                } else {
-                    temporaryError
-                }
+                lastError = temporaryError
                 return null
             }
+            lastError = null
 
             val root = JsonParser.parseString(body)
 
             // Extraire le payload : si le backend envoie { success, data }, prendre data
-            val payload = if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.has("data")) {
+            val payload = if (root.isJsonObject && root.asJsonObject.has("data")) {
                 root.asJsonObject.get("data")
             } else {
                 root
@@ -246,6 +247,14 @@ class BackendApiClient {
                     } catch (e: JsonSyntaxException) {
                         emptyList<Any>() as T
                     }
+                } else if (
+                    T::class.java == ArticleListDto::class.java ||
+                    T::class.java == ContentListDto::class.java ||
+                    T::class.java == CommentaryDto::class.java
+                ) {
+                    return gson.fromJson<T>(wrapArray("items", payload.asJsonArray), type)
+                } else if (T::class.java == StandingsDto::class.java) {
+                    return gson.fromJson<T>(wrapArray("groups", payload.asJsonArray), type)
                 } else {
                     // T attend un objet mais on a un tableau
                     // Si le tableau est vide → pas de données, retourner null
@@ -263,8 +272,30 @@ class BackendApiClient {
 
             // Payload est un objet JSON → désérialiser normalement
             val type = object : TypeToken<T>() {}.type
+            val isListType = when (type) {
+                is ParameterizedType -> {
+                    val raw = type.rawType
+                    raw is Class<*> && List::class.java.isAssignableFrom(raw)
+                }
+                is Class<*> -> List::class.java.isAssignableFrom(type)
+                else -> false
+            }
+            val objectPayload = if (payload.isJsonObject && isListType) {
+                val obj = payload.asJsonObject
+                when {
+                    obj.has("items") -> obj.get("items")
+                    obj.has("groups") -> obj.get("groups")
+                    obj.has("data") -> obj.get("data")
+                    else -> payload
+                }
+            } else if (payload.isJsonObject && T::class.java == StandingsDto::class.java) {
+                val obj = payload.asJsonObject
+                if (!obj.has("groups") && obj.has("items")) wrapElement("groups", obj.get("items")) else payload
+            } else {
+                payload
+            }
             return try {
-                gson.fromJson<T>(payload, type)
+                gson.fromJson<T>(objectPayload, type)
             } catch (e: JsonSyntaxException) {
                 // Erreur de parsing : logger mais ne pas crasher
                 lastError = temporaryError
@@ -304,7 +335,7 @@ class BackendApiClient {
                     ok = response.isSuccessful,
                     httpCode = response.code,
                     itemCount = count,
-                    sourceUsed = if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
+                    sourceUsed = if (response.isSuccessful || renderRoute) "Render" else "Local",
                     message = if (response.isSuccessful) null else temporaryError
                 )
             }
@@ -343,6 +374,12 @@ class BackendApiClient {
 
         return 1
     }
+
+    private fun wrapArray(fieldName: String, array: JsonArray): JsonObject =
+        JsonObject().apply { add(fieldName, array) }
+
+    private fun wrapElement(fieldName: String, element: JsonElement): JsonObject =
+        JsonObject().apply { add(fieldName, element) }
 
     /** Classe les erreurs techniques en messages user-friendly */
     private fun classifyError(e: Exception): String = when {

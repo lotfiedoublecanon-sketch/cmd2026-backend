@@ -1,5 +1,6 @@
 package com.cdmafrique.live.data.model
 
+import android.text.Html
 import com.cdmafrique.live.data.api.*
 
 // ── Team ────────────────────────────────────────────────────
@@ -199,7 +200,8 @@ data class ContentResult(
     val content: String,
     val reliability: Reliability,
     val updatedAt: String?,
-    val source: String?
+    val source: String?,
+    val url: String? = null
 )
 
 // ── Analysis / Prediction ───────────────────────────────────
@@ -254,7 +256,8 @@ data class Article(
     val content: String?,
     val imageUrl: String?,
     val publishedAt: String?,
-    val source: String?
+    val source: String?,
+    val url: String? = null
 )
 
 // ═══════════════════════════════════════════════════════════
@@ -345,12 +348,22 @@ fun StandingGroupDto.toDomain() = StandingGroup(
     entries = entries.map { it.toDomain() }
 )
 
+private fun cleanDisplayText(value: String?): String? =
+    value
+        ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString() }
+        ?.replace('\u00A0', ' ')
+        ?.replace(Regex("<[^>]+>"), " ")
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
 fun ContentResultDto.toDomain() = ContentResult(
-    title = title.ifBlank { source ?: "Information" },
-    content = content ?: summary ?: url ?: "Aucune donnée source disponible pour le moment",
+    title = cleanDisplayText(title) ?: cleanDisplayText(source) ?: "Information",
+    content = cleanDisplayText(content) ?: cleanDisplayText(summary) ?: cleanDisplayText(url) ?: "Aucune donnée source disponible pour le moment",
     reliability = Reliability.fromKey(reliability ?: if ((confidence ?: 0.0) >= 0.8) "reliable" else "unconfirmed"),
     updatedAt = updatedAt,
-    source = source ?: sourceType
+    source = cleanDisplayText(source ?: sourceType),
+    url = url?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
 )
 
 fun AnalysisDto.toDomain() = Analysis(
@@ -375,10 +388,11 @@ fun CommentaryItemDto.toDomain() = CommentaryItem(
 
 fun ArticleDto.toDomain() = Article(
     id = id.ifBlank { "${source.orEmpty()}-${title.hashCode()}" },
-    title = title.ifBlank { source ?: "Actualité" },
-    summary = summary,
-    content = content ?: summary ?: url,
+    title = cleanDisplayText(title) ?: cleanDisplayText(source) ?: "Actualité",
+    summary = cleanDisplayText(summary),
+    content = cleanDisplayText(content) ?: cleanDisplayText(summary) ?: cleanDisplayText(url),
     imageUrl = imageUrl,
     publishedAt = publishedAt,
-    source = source ?: sourceType
+    source = cleanDisplayText(source ?: sourceType),
+    url = url?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
 )

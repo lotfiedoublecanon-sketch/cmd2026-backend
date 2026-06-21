@@ -185,8 +185,8 @@ class FapiClient {
     const status = this.mapStatus(raw);
     const period = this.mapPeriod(raw);
 
-    const homeScore = raw.home_score ?? raw.homeScore ?? raw.score_home ?? 0;
-    const awayScore = raw.away_score ?? raw.awayScore ?? raw.score_away ?? 0;
+    const homeScore = raw.home_score ?? raw.homeScore ?? raw.score_home ?? null;
+    const awayScore = raw.away_score ?? raw.awayScore ?? raw.score_away ?? null;
 
     return {
       id: raw.id || raw.match_id || raw.matchId,

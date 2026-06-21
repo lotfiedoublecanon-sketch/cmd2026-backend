@@ -2,6 +2,8 @@ package com.cdmafrique.live
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Context
+import android.widget.Toast
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -81,6 +83,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,7 +111,9 @@ import com.cdmafrique.live.ui.theme.AfriqueRed
 import com.cdmafrique.live.ui.theme.AfriqueSoft
 import com.cdmafrique.live.ui.theme.AfriqueTeal
 import com.cdmafrique.live.ui.theme.CDM2026LiveTheme
+import kotlinx.coroutines.delay
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -167,9 +174,6 @@ private fun CdmV5App(viewModel: MainViewModel) {
                 title = currentScreen.label,
                 onRefresh = {
                     viewModel.refreshAll()
-                    viewModel.loadDiagnostic()
-                    viewModel.loadArticles()
-                    viewModel.loadStandings()
                 }
             )
         },
@@ -273,11 +277,79 @@ private fun AppBody(
     val training by viewModel.trainingContent.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    var lastRefreshLabel by remember { mutableStateOf("jamais") }
+
+    fun markUpdated() {
+        lastRefreshLabel = currentClockLabel()
+    }
+
+    val forceRefreshAll: () -> Unit = {
+        viewModel.refreshAll()
+        markUpdated()
+    }
+    val forceLoadArticles: () -> Unit = {
+        viewModel.loadArticles()
+        markUpdated()
+    }
+    val forceRefreshGlobalContent: () -> Unit = {
+        viewModel.refreshGlobalContent()
+        markUpdated()
+    }
+    val forceLoadStandings: () -> Unit = {
+        viewModel.loadStandings()
+        markUpdated()
+    }
+    val forceLoadDiagnostic: () -> Unit = {
+        viewModel.loadDiagnostic()
+        markUpdated()
+    }
+    val forceRefreshMatchDetail: () -> Unit = {
+        viewModel.refreshMatchDetail()
+        markUpdated()
+    }
 
     LaunchedEffect(Unit) {
-        viewModel.loadDiagnostic()
-        viewModel.loadArticles()
-        viewModel.loadStandings()
+        viewModel.refreshAll()
+        markUpdated()
+    }
+
+    LaunchedEffect(screen) {
+        when (screen) {
+            AppScreen.Home -> viewModel.refreshAll()
+            AppScreen.News -> viewModel.loadArticles()
+            AppScreen.Videos,
+            AppScreen.Interviews,
+            AppScreen.Injuries,
+            AppScreen.Training -> viewModel.refreshGlobalContent()
+            AppScreen.Standings -> viewModel.loadStandings()
+            AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+            else -> Unit
+        }
+        markUpdated()
+    }
+
+    val hasLiveMatch = liveMatches.any { it.status.isLive }
+    val selectedMatchIsLive = selectedMatch?.status?.isLive == true
+
+    LaunchedEffect(screen, hasLiveMatch, selectedMatch?.id, selectedMatchIsLive) {
+        while (true) {
+            val liveMode = (screen == AppScreen.Live && hasLiveMatch) ||
+                (screen == AppScreen.Match && selectedMatchIsLive)
+            delay(if (liveMode) 10_000L else 60_000L)
+            when (screen) {
+                AppScreen.Home, AppScreen.Live, AppScreen.Calendar, AppScreen.Africa -> viewModel.refreshAll()
+                AppScreen.Match -> viewModel.refreshMatchDetail()
+                AppScreen.News -> viewModel.loadArticles()
+                AppScreen.Videos,
+                AppScreen.Interviews,
+                AppScreen.Injuries,
+                AppScreen.Training -> viewModel.refreshGlobalContent()
+                AppScreen.Standings -> viewModel.loadStandings()
+                AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+                else -> Unit
+            }
+            markUpdated()
+        }
     }
 
     val openMatch: (Match) -> Unit = { match ->
@@ -302,6 +374,13 @@ private fun AppBody(
             )
         }
 
+        AutoRefreshInfoCard(
+            screen = screen,
+            lastRefreshLabel = lastRefreshLabel,
+            isLiveMode = (screen == AppScreen.Live && hasLiveMatch) ||
+                (screen == AppScreen.Match && selectedMatchIsLive)
+        )
+
         when (screen) {
             AppScreen.Home -> HomeScreenV5(
                 live = liveMatches,
@@ -309,7 +388,7 @@ private fun AppBody(
                 upcoming = upcomingMatches,
                 articles = articles,
                 isLoading = isLoading,
-                onRefresh = viewModel::refreshAll,
+                onRefresh = forceRefreshAll,
                 onMatchClick = openMatch,
                 navigate = navigate
             )
@@ -318,13 +397,13 @@ private fun AppBody(
                 today = todayMatches,
                 upcoming = upcomingMatches,
                 isLoading = isLoading,
-                onRefresh = viewModel::refreshAll,
+                onRefresh = forceRefreshAll,
                 onMatchClick = openMatch
             )
             AppScreen.Calendar -> CalendarScreenV5(
                 matches = calendarMatches,
                 isLoading = isLoading,
-                onRefresh = viewModel::refreshAll,
+                onRefresh = forceRefreshAll,
                 onMatchClick = openMatch
             )
             AppScreen.Africa -> AfricaScreenV5(
@@ -347,36 +426,36 @@ private fun AppBody(
                 interviews = interviews,
                 training = training,
                 onBack = { navigate(AppScreen.Calendar) },
-                onRefresh = viewModel::refreshMatchDetail
+                onRefresh = forceRefreshMatchDetail
             )
-            AppScreen.Standings -> StandingsScreenV5(standings, viewModel::loadStandings)
-            AppScreen.News -> NewsScreenV5(articles, viewModel::loadArticles)
+            AppScreen.Standings -> StandingsScreenV5(standings, forceLoadStandings)
+            AppScreen.News -> NewsScreenV5(articles, forceLoadArticles)
             AppScreen.Videos -> SimpleContentScreen(
                 title = "Videos",
                 items = media,
                 empty = "Aucune video disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                onRetry = forceRefreshGlobalContent
             )
             AppScreen.Interviews -> SimpleContentScreen(
                 title = "Interviews",
                 items = interviews,
                 empty = "Aucune interview disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                onRetry = forceRefreshGlobalContent
             )
             AppScreen.Injuries -> SimpleContentScreen(
                 title = "Blessures",
                 items = injuries,
                 empty = "Aucune blessure confirmee pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                onRetry = forceRefreshGlobalContent
             )
             AppScreen.Training -> SimpleContentScreen(
                 title = "Entrainements",
                 items = training,
                 empty = "Aucune information entrainement disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                onRetry = forceRefreshGlobalContent
             )
             AppScreen.Notifications -> NotificationSettingsScreen()
-            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, viewModel::loadDiagnostic)
+            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, forceLoadDiagnostic)
             AppScreen.Widget -> WidgetInfoScreen()
             AppScreen.Settings -> SettingsScreenV5()
         }
@@ -565,7 +644,9 @@ private fun MatchDetailScreenV5(
         Text("Retour")
     }
     HeroCard(match = match, onMatchClick = {}, onAi = onRefresh)
-    SectionTitle("Resume")
+    SectionTitle("Détails du match")
+    MatchCoreDetailCard(match)
+    SectionTitle("Résumé")
     InfoCard(
         title = "Source V5",
         body = if (match.id.startsWith("local-")) {
@@ -603,6 +684,24 @@ private fun MatchDetailScreenV5(
     SimpleContentInline("Blessures", injuries, "Aucune blessure confirmee.")
     SimpleContentInline("Interviews", interviews, "Aucune interview disponible.")
     SimpleContentInline("Entrainements", training, "Aucune info entrainement disponible.")
+}
+
+@Composable
+private fun MatchCoreDetailCard(match: Match) {
+    CardShell {
+        Text("Informations principales", style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
+        StatusLine("Match", "${match.homeTeam.name} vs ${match.awayTeam.name}")
+        StatusLine("Score", scoreLine(match))
+        StatusLine("Statut", statusText(match))
+        StatusLine("Date", formatKickoff(match.kickoff))
+        StatusLine("Groupe", match.group ?: "À confirmer")
+        StatusLine("Tour", match.round ?: "À confirmer")
+        StatusLine("Stade", match.venue ?: "À confirmer")
+        StatusLine(
+            "Source",
+            if (match.id.startsWith("local-")) "Calendrier local de secours" else "Backend Render V5"
+        )
+    }
 }
 
 @Composable
@@ -749,6 +848,24 @@ private fun SettingsScreenV5() {
 }
 
 @Composable
+private fun AutoRefreshInfoCard(
+    screen: AppScreen,
+    lastRefreshLabel: String,
+    isLiveMode: Boolean
+) {
+    if (screen != AppScreen.Live && screen != AppScreen.Match) return
+    val refreshText = if (isLiveMode) {
+        "Actualisation auto live : 10 s"
+    } else {
+        "Actualisation auto : 60 s"
+    }
+    CardShell {
+        Text("Dernière mise à jour : $lastRefreshLabel", color = AfriqueInk, style = MaterialTheme.typography.labelLarge)
+        Text(refreshText, color = AfriqueMuted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
 private fun MatchListBlock(
     matches: List<Match>,
     empty: String,
@@ -807,7 +924,7 @@ private fun HeroCard(match: Match, onMatchClick: () -> Unit, onAi: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = AfriqueGold, contentColor = AfriqueInk),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Ouvrir resume")
+                Text("Actualiser / détails")
             }
         }
     }
@@ -856,6 +973,7 @@ private fun MatchCardV5(match: Match, onClick: () -> Unit) {
                 TeamColumn(match.awayTeam.code, match.awayTeam.name, Modifier.weight(1f))
             }
             Text(formatKickoff(match.kickoff), color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
+            Text("Toucher pour voir les détails du match", color = AfriqueGreen, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -927,10 +1045,20 @@ private fun StandingGroupCard(group: StandingGroup, compact: Boolean) {
 
 @Composable
 private fun ArticleCard(article: Article) {
-    CardShell {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val cleanUrl = resolveArticleUrl(article)
+    CardShell(
+        modifier = if (cleanUrl != null) {
+            Modifier.clickable { openExternalUrl(cleanUrl, uriHandler, context) }
+        } else {
+            Modifier
+        }
+    ) {
         Text(article.title, style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
-        if (!article.summary.isNullOrBlank()) {
-            Text(article.summary, color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
+        val text = article.summary ?: article.content
+        if (!text.isNullOrBlank()) {
+            Text(text, color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
         }
         Text(article.source ?: "Backend", color = AfriqueGreen, style = MaterialTheme.typography.labelLarge)
     }
@@ -938,11 +1066,62 @@ private fun ArticleCard(article: Article) {
 
 @Composable
 private fun ContentCard(item: ContentResult) {
-    CardShell {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val cleanUrl = resolveContentUrl(item)
+    CardShell(
+        modifier = if (cleanUrl != null) {
+            Modifier.clickable { openExternalUrl(cleanUrl, uriHandler, context) }
+        } else {
+            Modifier
+        }
+    ) {
         Text(item.title, style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
         Text(item.content, color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
         Text(item.source ?: item.reliability.display, color = AfriqueGreen, style = MaterialTheme.typography.labelLarge)
     }
+}
+
+
+private fun cleanHttpUrl(raw: String?): String? = raw
+    ?.trim()
+    ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+
+private fun resolveArticleUrl(article: Article): String? {
+    cleanHttpUrl(article.url)?.let { return it }
+    val haystack = listOf(article.title, article.summary, article.content, article.source)
+        .joinToString(" ")
+        .lowercase(Locale.FRANCE)
+    return when {
+        "diagnostic" in haystack || "render" in haystack || "backend" in haystack -> BuildConfig.BACKEND_URL.trimEnd('/') + "/diagnostic"
+        "afrique" in haystack || "calendrier" in haystack || "cdm 2026" in haystack || "coupe du monde" in haystack -> "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026"
+        "video" in haystack || "vidéo" in haystack -> "https://www.youtube.com/results?search_query=Coupe+du+Monde+2026+football"
+        else -> "https://news.google.com/search?q=Coupe%20du%20Monde%202026%20football&hl=fr&gl=FR&ceid=FR:fr"
+    }
+}
+
+private fun resolveContentUrl(item: ContentResult): String? {
+    cleanHttpUrl(item.url)?.let { return it }
+    val haystack = listOf(item.title, item.content, item.source, item.reliability.display)
+        .joinToString(" ")
+        .lowercase(Locale.FRANCE)
+    return when {
+        "video" in haystack || "vidéo" in haystack -> "https://www.youtube.com/results?search_query=Coupe+du+Monde+2026+football"
+        "interview" in haystack -> "https://news.google.com/search?q=Coupe%20du%20Monde%202026%20interview%20football&hl=fr&gl=FR&ceid=FR:fr"
+        "blessure" in haystack || "injur" in haystack -> "https://news.google.com/search?q=Coupe%20du%20Monde%202026%20blessures%20football&hl=fr&gl=FR&ceid=FR:fr"
+        "entrain" in haystack || "entraîn" in haystack || "training" in haystack -> "https://news.google.com/search?q=Coupe%20du%20Monde%202026%20entrainement%20football&hl=fr&gl=FR&ceid=FR:fr"
+        else -> "https://news.google.com/search?q=Coupe%20du%20Monde%202026%20football&hl=fr&gl=FR&ceid=FR:fr"
+    }
+}
+
+private fun openExternalUrl(url: String?, uriHandler: UriHandler, context: Context) {
+    val cleanUrl = cleanHttpUrl(url)
+    if (cleanUrl == null) {
+        Toast.makeText(context, "Lien indisponible.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    runCatching { uriHandler.openUri(cleanUrl) }
+        .onFailure { Toast.makeText(context, "Impossible d’ouvrir le lien.", Toast.LENGTH_SHORT).show() }
 }
 
 @Composable
@@ -1005,11 +1184,11 @@ private fun QuickCard(label: String, icon: ImageVector, modifier: Modifier = Mod
 }
 
 @Composable
-private fun CardShell(content: @Composable ColumnScope.() -> Unit) {
+private fun CardShell(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .border(1.dp, AfriqueLine, RoundedCornerShape(8.dp))
     ) {
@@ -1053,6 +1232,10 @@ private fun FooterCard() {
         }
     }
 }
+
+private fun currentClockLabel(): String = DateTimeFormatter
+    .ofPattern("HH:mm:ss", Locale.FRANCE)
+    .format(LocalTime.now())
 
 private fun scoreLine(match: Match): String {
     val home = match.homeScore?.toString() ?: "-"

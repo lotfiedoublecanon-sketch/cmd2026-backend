@@ -34,6 +34,35 @@ function standingsAsGroups(entries: StandingEntry[] = []) {
   }));
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function listResponse<T>(result: ApiResponse<T[]>) {
+  const updatedAt = nowIso();
+  return {
+    ...result,
+    items: result.data,
+    cachedAt: updatedAt,
+    updatedAt,
+    fallback: result.source === 'cache',
+  };
+}
+
+function emptyListResponse(error?: string) {
+  const updatedAt = nowIso();
+  return {
+    success: false,
+    data: [],
+    items: [],
+    source: 'backend',
+    cachedAt: updatedAt,
+    updatedAt,
+    fallback: true,
+    ...(error ? { error } : {}),
+  };
+}
+
 async function getMatchContext(matchId: string): Promise<string> {
   const result = await mergeService.getMatchById(matchId);
   const match = result.data;
@@ -54,18 +83,9 @@ async function getMatchContext(matchId: string): Promise<string> {
 router.get('/live', async (req: Request, res: Response) => {
   try {
     const result = await mergeService.getLiveMatches();
-    const response: ApiResponse<NormalizedMatch[]> = {
-      ...result,
-      cachedAt: new Date().toISOString(),
-    };
-    res.json(response);
+    res.json(listResponse(result));
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      data: [],
-      source: 'fapi',
-      error: (error as Error).message,
-    });
+    res.json(emptyListResponse((error as Error).message));
   }
 });
 
@@ -76,18 +96,9 @@ router.get('/live', async (req: Request, res: Response) => {
 router.get('/today', async (req: Request, res: Response) => {
   try {
     const result = await mergeService.getTodayMatches();
-    const response: ApiResponse<NormalizedMatch[]> = {
-      ...result,
-      cachedAt: new Date().toISOString(),
-    };
-    res.json(response);
+    res.json(listResponse(result));
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      data: [],
-      source: 'fapi',
-      error: (error as Error).message,
-    });
+    res.json(emptyListResponse((error as Error).message));
   }
 });
 
@@ -99,18 +110,9 @@ router.get('/upcoming', async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
     const result = await mergeService.getUpcomingMatches(days);
-    const response: ApiResponse<NormalizedMatch[]> = {
-      ...result,
-      cachedAt: new Date().toISOString(),
-    };
-    res.json(response);
+    res.json(listResponse(result));
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      data: [],
-      source: 'fapi',
-      error: (error as Error).message,
-    });
+    res.json(emptyListResponse((error as Error).message));
   }
 });
 
@@ -121,17 +123,25 @@ router.get('/upcoming', async (req: Request, res: Response) => {
 router.get('/standings', async (req: Request, res: Response) => {
   try {
     const result = await mergeService.getStandings();
+    const groups = standingsAsGroups(result.data);
     const response = {
       ...result,
-      data: { groups: standingsAsGroups(result.data) },
-      cachedAt: new Date().toISOString(),
+      data: { groups },
+      groups,
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
+      fallback: result.source === 'cache',
     };
     res.json(response);
   } catch (error) {
-    res.status(500).json({
+    res.json({
       success: false,
       data: { groups: [] },
-      source: 'fapi',
+      groups: [],
+      source: 'backend',
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
+      fallback: true,
       error: (error as Error).message,
     });
   }
@@ -170,18 +180,9 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.get('/:id/events', async (req: Request, res: Response) => {
   try {
     const result = await mergeService.getMatchEvents(req.params.id);
-    const response: ApiResponse<MatchEvent[]> = {
-      ...result,
-      cachedAt: new Date().toISOString(),
-    };
-    res.json(response);
+    res.json(listResponse(result));
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      data: [],
-      source: 'fapi',
-      error: (error as Error).message,
-    });
+    res.json(emptyListResponse((error as Error).message));
   }
 });
 
@@ -194,14 +195,18 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
     const result = await mergeService.getMatchStats(req.params.id);
     const response: ApiResponse<MatchStats | null> = {
       ...result,
-      cachedAt: new Date().toISOString(),
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
     };
     res.json(response);
   } catch (error) {
-    res.status(500).json({
+    res.json({
       success: false,
       data: null,
-      source: 'fapi',
+      source: 'backend',
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
+      fallback: true,
       error: (error as Error).message,
     });
   }
@@ -216,14 +221,18 @@ router.get('/:id/lineups', async (req: Request, res: Response) => {
     const result = await mergeService.getMatchLineups(req.params.id);
     const response: ApiResponse<MatchLineups | null> = {
       ...result,
-      cachedAt: new Date().toISOString(),
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
     };
     res.json(response);
   } catch (error) {
-    res.status(500).json({
+    res.json({
       success: false,
       data: null,
-      source: 'fapi',
+      source: 'backend',
+      cachedAt: nowIso(),
+      updatedAt: nowIso(),
+      fallback: true,
       error: (error as Error).message,
     });
   }

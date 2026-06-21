@@ -363,7 +363,7 @@ class AgentOrchestratorService {
     const [live, today, upcoming, standings] = await Promise.allSettled([
       mergeService.getLiveMatches(),
       mergeService.getTodayMatches(),
-      mergeService.getUpcomingMatches(30),
+      mergeService.getUpcomingMatches(60),
       mergeService.getStandings(),
     ]);
 

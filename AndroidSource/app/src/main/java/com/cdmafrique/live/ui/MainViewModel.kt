@@ -16,21 +16,17 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel corrigé.
- *
- * Corrections :
- * 1. Erreurs techniques JAMAIS affichées à l'utilisateur
- * 2. _error contient uniquement des messages user-friendly
- * 3. loadLiveMatches() ne pollue plus _error si le backend est vide
- * 4. Les fallbacks locaux sont utilisés silencieusement
- * 5. Les erreurs techniques de parsing ou reseau ne remontent plus.
+ * V5.0.9 Redha
+ * - refreshAll() recharge tout réellement
+ * - le démarrage ne dépend plus du clic “Réessayer”
+ * - matchs/classements utilisent le calendrier local uniquement si le serveur renvoie vide
+ * - news/videos/interviews/injuries/training gardent le serveur prioritaire et évitent les faux contenus locaux quand Render répond
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = MatchRepository()
     private val localFallback = LocalWorldCupFallback(application.applicationContext)
 
-    // ── Live Matches ────────────────────────────────────────
     private val _liveMatches = MutableStateFlow<List<Match>>(emptyList())
     val liveMatches: StateFlow<List<Match>> = _liveMatches.asStateFlow()
 
@@ -49,7 +45,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _articles = MutableStateFlow<List<Article>>(emptyList())
     val articles: StateFlow<List<Article>> = _articles.asStateFlow()
 
-    // ── Match Detail ────────────────────────────────────────
     private val _selectedMatch = MutableStateFlow<Match?>(null)
     val selectedMatch: StateFlow<Match?> = _selectedMatch.asStateFlow()
 
@@ -71,7 +66,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _commentary = MutableStateFlow<List<CommentaryItem>>(emptyList())
     val commentary: StateFlow<List<CommentaryItem>> = _commentary.asStateFlow()
 
-    // ── Content Tabs ────────────────────────────────────────
     private val _mediaContent = MutableStateFlow<List<ContentResult>>(emptyList())
     val mediaContent: StateFlow<List<ContentResult>> = _mediaContent.asStateFlow()
 
@@ -84,94 +78,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _trainingContent = MutableStateFlow<List<ContentResult>>(emptyList())
     val trainingContent: StateFlow<List<ContentResult>> = _trainingContent.asStateFlow()
 
-    // ── Diagnostic ──────────────────────────────────────────
     private val _diagnostic = MutableStateFlow<AppDiagnostic?>(null)
     val diagnostic: StateFlow<AppDiagnostic?> = _diagnostic.asStateFlow()
 
-    // ── Loading / Error ─────────────────────────────────────
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // FIX : _error ne contient PLUS JAMAIS de message technique.
-    // Seuls des messages user-friendly y sont écrits.
-    // Les erreurs réseau "normales" (pas de match live) ne sont plus des erreurs.
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // ── Polling ─────────────────────────────────────────────
+    private var backendReachable: Boolean = false
     private var livePollingJob: Job? = null
     private var todayPollingJob: Job? = null
-
-    // ── Initialization ──────────────────────────────────────
+    private var refreshJob: Job? = null
 
     init {
-        loadInitialData()
+        refreshAll()
+        startLivePolling()
         registerFcmToken()
         subscribeToDefaultTopics()
     }
 
-    fun loadInitialData() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            loadLiveMatches()
-            loadTodayMatches()
-            loadUpcomingMatches()
-            loadStandings()
-            loadArticles()
-            loadGlobalContent()
-            _isLoading.value = false
+    fun loadInitialData() = refreshAll()
+
+    fun refreshAll() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            refreshAllInternal()
         }
-        startLivePolling()
     }
 
-    // ── Live Matches ────────────────────────────────────────
-    //
-    // FIX : les erreurs de connexion ne sont plus propagées dans _error
-    // si c'est simplement que le backend n'a pas de données.
-    // Les fallbacks locaux sont utilisés silencieusement.
+    private suspend fun refreshAllInternal() {
+        _isLoading.value = true
+        _error.value = null
+        loadDiagnosticNow(includeRoutes = false)
+        loadLiveMatchesNow()
+        loadTodayMatchesNow()
+        loadUpcomingMatchesNow()
+        loadStandingsNow()
+        loadArticlesNow()
+        loadGlobalContentNow()
+        refreshCalendarFallback()
+        _isLoading.value = false
+    }
 
-    private suspend fun loadLiveMatches() {
+    private suspend fun loadLiveMatchesNow() {
         repository.getLiveMatches()
-            .onSuccess { matches ->
-                _liveMatches.value = matches.ifEmpty {
-                    showLocalNotice()
-                    localFallback.liveMatches()
-                }
-            }
-            .onFailure {
-                showLocalNotice()
-                _liveMatches.value = localFallback.liveMatches()
-            }
+            .onSuccess { matches -> _liveMatches.value = matches }
+            .onFailure { _liveMatches.value = emptyList() }
         refreshCalendarFallback()
     }
 
-    private suspend fun loadTodayMatches() {
+    private suspend fun loadTodayMatchesNow() {
         repository.getTodayMatches()
-            .onSuccess { matches ->
-                _todayMatches.value = matches.ifEmpty {
-                    showLocalNotice()
-                    localFallback.todayMatches().ifEmpty { localFallback.upcomingMatches(7) }
-                }
-            }
-            .onFailure {
-                // Erreur réseau : utiliser le fallback local, pas d'erreur affichée
-                showLocalNotice()
-                _todayMatches.value = localFallback.todayMatches().ifEmpty { localFallback.upcomingMatches(7) }
-            }
+            .onSuccess { matches -> _todayMatches.value = matches }
+            .onFailure { _todayMatches.value = emptyList() }
         refreshCalendarFallback()
     }
 
-    private suspend fun loadUpcomingMatches() {
+    private suspend fun loadUpcomingMatchesNow() {
         repository.getUpcomingMatches()
             .onSuccess { matches ->
-                _upcomingMatches.value = matches.ifEmpty {
-                    showLocalNotice()
-                    localFallback.upcomingMatches(30)
-                }
+                _upcomingMatches.value = matches.ifEmpty { localFallback.upcomingMatches(60) }
             }
             .onFailure {
-                showLocalNotice()
-                _upcomingMatches.value = localFallback.upcomingMatches(30)
+                _upcomingMatches.value = localFallback.upcomingMatches(60)
+                showLocalNoticeIfOffline()
             }
         refreshCalendarFallback()
     }
@@ -179,84 +151,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshCalendarFallback() {
         val merged = (_liveMatches.value + _todayMatches.value + _upcomingMatches.value)
             .distinctBy { it.id }
-        _calendarMatches.value = merged.ifEmpty { localFallback.upcomingMatches(30) }
-    }
-
-    fun refreshAll() {
-        _error.value = null  // Effacer l'erreur au refresh
-        loadInitialData()
+        _calendarMatches.value = merged.ifEmpty { localFallback.upcomingMatches(60) }
     }
 
     fun loadStandings() {
-        viewModelScope.launch {
-            repository.getStandings()
-                .onSuccess { groups ->
-                    _standings.value = groups.ifEmpty {
-                        showLocalNotice()
-                        localFallback.standings()
-                    }
-                }
-                .onFailure {
-                    showLocalNotice()
-                    _standings.value = localFallback.standings()
-                }
-        }
+        viewModelScope.launch { loadStandingsNow() }
+    }
+
+    private suspend fun loadStandingsNow() {
+        repository.getStandings()
+            .onSuccess { groups -> _standings.value = groups.ifEmpty { localFallback.standings() } }
+            .onFailure {
+                _standings.value = localFallback.standings()
+                showLocalNoticeIfOffline()
+            }
     }
 
     fun loadArticles() {
-        viewModelScope.launch {
-            repository.getArticles()
-                .onSuccess { items ->
-                    _articles.value = items.ifEmpty {
-                        showLocalNotice()
-                        localFallback.fallbackArticles()
-                    }
-                }
-                .onFailure {
-                    showLocalNotice()
-                    _articles.value = localFallback.fallbackArticles()
-                }
-        }
+        viewModelScope.launch { loadArticlesNow() }
     }
 
-    private suspend fun loadGlobalContent() {
+    private suspend fun loadArticlesNow() {
+        repository.getArticles()
+            .onSuccess { items ->
+                // Important : ne pas afficher les 3 fausses cartes locales si Render répond.
+                _articles.value = if (items.isNotEmpty()) items else if (backendReachable) emptyList() else localFallback.fallbackArticles()
+            }
+            .onFailure {
+                _articles.value = if (backendReachable) emptyList() else localFallback.fallbackArticles()
+                showLocalNoticeIfOffline()
+            }
+    }
+
+    fun refreshGlobalContent() {
+        viewModelScope.launch { loadGlobalContentNow() }
+    }
+
+    private suspend fun loadGlobalContentNow() {
         repository.getVideos()
-            .onSuccess { items -> _mediaContent.value = items.ifEmpty { showLocalNotice(); localFallback.mediaContent() } }
-            .onFailure { showLocalNotice(); _mediaContent.value = localFallback.mediaContent() }
+            .onSuccess { items -> _mediaContent.value = serverOnlyWhenReachable(items) { localFallback.mediaContent() } }
+            .onFailure { _mediaContent.value = if (backendReachable) emptyList() else localFallback.mediaContent() }
 
         repository.getGlobalInjuries()
-            .onSuccess { items -> _injuriesContent.value = items.ifEmpty { showLocalNotice(); localFallback.injuriesContent() } }
-            .onFailure { showLocalNotice(); _injuriesContent.value = localFallback.injuriesContent() }
+            .onSuccess { items -> _injuriesContent.value = serverOnlyWhenReachable(items) { localFallback.injuriesContent() } }
+            .onFailure { _injuriesContent.value = if (backendReachable) emptyList() else localFallback.injuriesContent() }
 
         repository.getGlobalInterviews()
-            .onSuccess { items -> _interviewsContent.value = items.ifEmpty { showLocalNotice(); localFallback.interviewsContent() } }
-            .onFailure { showLocalNotice(); _interviewsContent.value = localFallback.interviewsContent() }
+            .onSuccess { items -> _interviewsContent.value = serverOnlyWhenReachable(items) { localFallback.interviewsContent() } }
+            .onFailure { _interviewsContent.value = if (backendReachable) emptyList() else localFallback.interviewsContent() }
 
         repository.getGlobalTraining()
-            .onSuccess { items -> _trainingContent.value = items.ifEmpty { showLocalNotice(); localFallback.trainingContent() } }
-            .onFailure { showLocalNotice(); _trainingContent.value = localFallback.trainingContent() }
+            .onSuccess { items -> _trainingContent.value = serverOnlyWhenReachable(items) { localFallback.trainingContent() } }
+            .onFailure { _trainingContent.value = if (backendReachable) emptyList() else localFallback.trainingContent() }
     }
 
-    private fun showLocalNotice() {
-        _error.value = localFallback.localNotice()
+    private fun <T> serverOnlyWhenReachable(items: List<T>, localProvider: () -> List<T>): List<T> {
+        return if (items.isNotEmpty()) items else if (backendReachable) emptyList() else localProvider()
     }
 
-    // ── Polling ─────────────────────────────────────────────
+    private fun showLocalNoticeIfOffline() {
+        if (!backendReachable) _error.value = localFallback.localNotice()
+    }
 
     fun startLivePolling() {
         livePollingJob?.cancel()
         livePollingJob = viewModelScope.launch {
             while (isActive) {
-                delay(15_000) // 15 seconds for live
-                loadLiveMatches()
+                delay(15_000)
+                loadLiveMatchesNow()
             }
         }
         todayPollingJob?.cancel()
         todayPollingJob = viewModelScope.launch {
             while (isActive) {
-                delay(30_000) // 30 seconds for today
-                loadTodayMatches()
-                loadUpcomingMatches()
+                delay(30_000)
+                loadTodayMatchesNow()
+                loadUpcomingMatchesNow()
             }
         }
     }
@@ -266,19 +236,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         todayPollingJob?.cancel()
     }
 
-    // ── Match Detail ────────────────────────────────────────
-
     fun selectMatch(matchId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             repository.getMatchById(matchId)
                 .onSuccess { match ->
                     _selectedMatch.value = match
-                    if (match != null) {
-                        loadMatchDetails(matchId)
-                    }
+                    loadMatchDetails(match.id)
                 }
-                .onFailure { /* Match non trouvé, selectedMatch reste null */ }
             _isLoading.value = false
         }
     }
@@ -299,61 +264,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (match.id.startsWith("local-")) {
             loadLocalMatchDetails(match)
         } else {
-            viewModelScope.launch {
-                loadMatchDetails(match.id)
-            }
+            viewModelScope.launch { loadMatchDetails(match.id) }
         }
     }
 
     private suspend fun loadMatchDetails(matchId: String) {
         val currentMatch = _selectedMatch.value
-        // Load events — silencieux si erreur
+
         repository.getMatchEvents(matchId)
             .onSuccess { events -> _matchEvents.value = events.ifEmpty { localEventsFor(currentMatch) } }
 
-        // Load stats — null si indisponible, c'est normal
         repository.getMatchStats(matchId)
-            .onSuccess { stats -> _matchStats.value = stats ?: currentMatch?.let { localFallback.matchStats(matchId, it) } }
+            .onSuccess { stats -> _matchStats.value = stats }
+            .onFailure { _matchStats.value = currentMatch?.let { localFallback.matchStats(matchId, it) } }
 
-        // Load lineups — null si indisponible, c'est normal
         repository.getMatchLineups(matchId)
-            .onSuccess { lineups -> _matchLineups.value = lineups ?: currentMatch?.let { localFallback.lineups(matchId, it) } }
+            .onSuccess { lineups -> _matchLineups.value = lineups }
+            .onFailure { _matchLineups.value = currentMatch?.let { localFallback.lineups(matchId, it) } }
 
-        // Load analysis — null si Gemini indisponible
-        repository.getAnalysis(matchId)
-            .onSuccess { _analysis.value = it }
-
-        // Load prediction — null si indisponible
+        repository.getAnalysis(matchId).onSuccess { _analysis.value = it }
         repository.getPrediction(matchId)
-            .onSuccess { prediction -> _prediction.value = prediction ?: currentMatch?.let { localFallback.prediction(matchId, it) } }
+            .onSuccess { _prediction.value = it }
+            .onFailure { _prediction.value = currentMatch?.let { localFallback.prediction(matchId, it) } }
 
-        // Load commentary — vide si indisponible
         repository.getCommentary(matchId)
             .onSuccess { items -> _commentary.value = items.ifEmpty { currentMatch?.let { localFallback.commentary(it) } ?: emptyList() } }
 
-        // Load content tabs — vides si indisponibles
         repository.getMedia(matchId)
-            .onSuccess { _mediaContent.value = it.ifEmpty { localFallback.mediaContent() } }
-
+            .onSuccess { _mediaContent.value = serverOnlyWhenReachable(it) { localFallback.mediaContent() } }
         repository.getInjuries(matchId)
-            .onSuccess { _injuriesContent.value = it.ifEmpty { localFallback.injuriesContent() } }
-
+            .onSuccess { _injuriesContent.value = serverOnlyWhenReachable(it) { localFallback.injuriesContent() } }
         repository.getInterviews(matchId)
-            .onSuccess { _interviewsContent.value = it.ifEmpty { localFallback.interviewsContent() } }
-
+            .onSuccess { _interviewsContent.value = serverOnlyWhenReachable(it) { localFallback.interviewsContent() } }
         repository.getTraining(matchId)
-            .onSuccess { _trainingContent.value = it.ifEmpty { localFallback.trainingContent() } }
+            .onSuccess { _trainingContent.value = serverOnlyWhenReachable(it) { localFallback.trainingContent() } }
     }
 
     fun refreshMatchDetail() {
-        val matchId = _selectedMatch.value?.id ?: return
-        val match = _selectedMatch.value
-        if (match?.id?.startsWith("local-") == true) {
+        val match = _selectedMatch.value ?: return
+        if (match.id.startsWith("local-")) {
             loadLocalMatchDetails(match)
-            return
-        }
-        viewModelScope.launch {
-            loadMatchDetails(matchId)
+        } else {
+            viewModelScope.launch { loadMatchDetails(match.id) }
         }
     }
 
@@ -377,38 +329,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Diagnostic ──────────────────────────────────────────
-
     fun loadDiagnostic() {
-        viewModelScope.launch {
-            _diagnostic.value = repository.getDiagnostic()
-        }
+        viewModelScope.launch { loadDiagnosticNow(includeRoutes = true) }
+    }
+
+    private suspend fun loadDiagnosticNow(includeRoutes: Boolean = true) {
+        val diagnostic = repository.getDiagnostic(includeRoutes = includeRoutes)
+        _diagnostic.value = diagnostic
+        backendReachable = diagnostic.backendStatus.equals("ok", ignoreCase = true) || diagnostic.backendStatus.equals("healthy", ignoreCase = true) || diagnostic.backendStatus.equals("up", ignoreCase = true)
+        if (backendReachable) _error.value = null
     }
 
     private fun registerFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                return@addOnCompleteListener
-            }
+            if (!task.isSuccessful) return@addOnCompleteListener
             val token = task.result ?: return@addOnCompleteListener
-            viewModelScope.launch {
-                repository.registerFcmToken(token)
-            }
+            viewModelScope.launch { repository.registerFcmToken(token) }
         }
     }
 
     private fun subscribeToDefaultTopics() {
         defaultNotificationTopics.forEach { topic ->
-            FirebaseMessaging.getInstance().subscribeToTopic(topic).addOnFailureListener {
-                // Silencieux : les notifications ne sont pas critiques
-            }
+            FirebaseMessaging.getInstance().subscribeToTopic(topic).addOnFailureListener { }
         }
     }
-
-    // ── Error handling ──────────────────────────────────────
-    //
-    // FIX : clearError() efface l'erreur.
-    // Les erreurs ne sont plus jamais techniques.
 
     fun clearError() {
         _error.value = null

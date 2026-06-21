@@ -213,8 +213,12 @@ class SportDbClient {
 
   private normalizeMatch(raw: any): NormalizedMatch {
     const status = this.mapSportDbStatus(raw);
-    const homeScore = parseInt(raw.intHomeScore || '0', 10) || 0;
-    const awayScore = parseInt(raw.intAwayScore || '0', 10) || 0;
+    const homeScore = raw.intHomeScore === null || raw.intHomeScore === undefined || raw.intHomeScore === ''
+      ? null
+      : parseInt(raw.intHomeScore, 10);
+    const awayScore = raw.intAwayScore === null || raw.intAwayScore === undefined || raw.intAwayScore === ''
+      ? null
+      : parseInt(raw.intAwayScore, 10);
 
     return {
       id: raw.idEvent || raw.idMatch || '',

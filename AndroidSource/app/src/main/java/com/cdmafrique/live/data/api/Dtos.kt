@@ -118,9 +118,9 @@ data class StandingEntryDto(
 data class ContentResultDto(
     val id: String? = null,
     val title: String = "",
-    @SerializedName(value = "content", alternate = ["summary"])
     val content: String? = null,
     val summary: String? = null,
+    @SerializedName(value = "url", alternate = ["link", "sourceUrl", "source_url", "canonicalUrl"])
     val url: String? = null,
     val reliability: String? = null,
     @SerializedName(value = "updatedAt", alternate = ["publishedAt"])
@@ -214,6 +214,7 @@ data class ArticleDto(
     val title: String = "",
     val summary: String? = null,
     val content: String? = null,
+    @SerializedName(value = "url", alternate = ["link", "sourceUrl", "source_url", "canonicalUrl"])
     val url: String? = null,
     val imageUrl: String? = null,
     val publishedAt: String? = null,

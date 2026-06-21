@@ -3,6 +3,7 @@
 // ============================================
 import { fapiClient } from '../clients/fapi-client';
 import { sportDbClient } from '../clients/sportdb-client';
+import { worldCupFallbackService } from './worldcup-fallback-service';
 import {
   NormalizedMatch, MatchEvent, MatchStats,
   MatchLineups, ApiResponse, StandingEntry
@@ -32,7 +33,7 @@ class MergeService {
       console.warn('[Merge] SportDB live also failed:', (e as Error).message);
     }
 
-    return { success: true, data: [], source: 'fapi' };
+    return { success: true, data: worldCupFallbackService.getLiveMatches(), source: 'cache' };
   }
 
   /**
@@ -68,7 +69,7 @@ class MergeService {
       return { success: true, data: sportDbMatches, source: 'sportdb' };
     }
 
-    return { success: true, data: [], source: 'fapi' };
+    return { success: true, data: worldCupFallbackService.getTodayMatches(), source: 'cache' };
   }
 
   /**
@@ -86,12 +87,14 @@ class MergeService {
 
     try {
       const sportDbMatches = await sportDbClient.getUpcomingMatches(days);
-      return { success: true, data: sportDbMatches, source: 'sportdb' };
+      if (sportDbMatches.length > 0) {
+        return { success: true, data: sportDbMatches, source: 'sportdb' };
+      }
     } catch (e) {
       console.warn('[Merge] SportDB upcoming also failed:', (e as Error).message);
     }
 
-    return { success: true, data: [], source: 'fapi' };
+    return { success: true, data: worldCupFallbackService.getUpcomingMatches(days), source: 'cache' };
   }
 
   /**
@@ -113,6 +116,9 @@ class MergeService {
     } catch (e) {
       console.warn('[Merge] SportDB match detail failed:', (e as Error).message);
     }
+
+    const fallbackMatch = worldCupFallbackService.getMatchById(matchId);
+    if (fallbackMatch) return { success: true, data: fallbackMatch, source: 'cache' };
 
     return { success: false, data: null, source: 'fapi', error: 'Match not found in any source' };
   }
@@ -149,6 +155,13 @@ class MergeService {
       if (stats) return { success: true, data: stats, source: 'fapi' };
     } catch (e) {
       console.warn('[Merge] FAPI stats failed:', (e as Error).message);
+    }
+
+    try {
+      const stats = await sportDbClient.getMatchStats(matchId);
+      if (stats) return { success: true, data: stats, source: 'sportdb' };
+    } catch (e) {
+      console.warn('[Merge] SportDB stats failed:', (e as Error).message);
     }
 
     return { success: true, data: null, source: 'fapi', error: 'Stats not available' };
@@ -190,12 +203,14 @@ class MergeService {
 
     try {
       const standings = await sportDbClient.getStandings();
-      return { success: true, data: standings, source: 'sportdb' };
+      if (standings.length > 0) {
+        return { success: true, data: standings, source: 'sportdb' };
+      }
     } catch (e) {
       console.warn('[Merge] SportDB standings failed:', (e as Error).message);
     }
 
-    return { success: true, data: [], source: 'fapi' };
+    return { success: true, data: worldCupFallbackService.getStandings(), source: 'cache' };
   }
 
   /**
