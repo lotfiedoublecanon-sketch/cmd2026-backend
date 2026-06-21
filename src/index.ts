@@ -13,6 +13,7 @@ import matchesRouter from './routes/matches';
 import aiRouter from './routes/ai';
 import notificationsRouter from './routes/notifications';
 import { agentOrchestrator } from './services/agent-orchestrator-service';
+import { sourceFetcherService } from './services/source-fetcher-service';
 import { checkSourcesHealth, getEnabledSources } from './config/open-sources';
 import { hasConfigValue } from './utils/env';
 
@@ -137,208 +138,67 @@ app.get('/sources/health', async (req, res) => {
   });
 });
 
+function sendSourceFeed(res: express.Response, result: Awaited<ReturnType<typeof sourceFetcherService.fetchArticles>>) {
+  res.json({
+    items: result.items,
+    message: result.message,
+    generatedAt: result.generatedAt,
+    sourceCount: result.sourceCount,
+    sourceHealth: result.sourceHealth,
+  });
+}
+
 app.get('/articles', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('MediaAgent', {
-      topic: 'actualites Coupe du Monde 2026',
-      message: 'Prepare 3 breves actualites utiles pour l application. Si les sources sont vides, explique clairement ce qui manque.',
-    });
-    res.json({
-      items: [
-        {
-          id: `media-agent-${Date.now()}`,
-          title: 'Actualites CDM 2026',
-          summary: result.geminiAvailable ? 'Synthese IA basee sur les sources serveur.' : 'IA temporairement indisponible.',
-          content: result.content,
-          source: 'MediaAgent + Gemini',
-          publishedAt: result.timestamp,
-          reliability: result.reliability,
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchArticles();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          id: 'backend-ready',
-          title: 'CDM 2026 Live V5 connecte',
-          summary: 'Le backend Render est en ligne. Les sources live officielles sont interrogees cote serveur.',
-          content: 'FAPI/TheStatsAPI est la source principale, SportDB/Flashscore sert de secours, Gemini reste cote backend.',
-          source: 'Backend V5',
-          publishedAt: new Date().toISOString(),
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
 app.get('/news', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('MediaAgent', {
-      topic: 'news Coupe du Monde 2026',
-      message: 'Resume les news disponibles pour la Coupe du Monde 2026 avec prudence.',
-    });
-    res.json({
-      items: [
-        {
-          id: `news-agent-${Date.now()}`,
-          title: 'Actualites CDM 2026',
-          summary: result.geminiAvailable ? 'News generees cote backend.' : 'IA temporairement indisponible.',
-          content: result.content,
-          source: 'MediaAgent + Gemini',
-          publishedAt: result.timestamp,
-          reliability: result.reliability,
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchNews();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          id: 'news-fallback',
-          title: 'Actualites CDM 2026',
-          summary: 'Flux actualites en attente de donnees officielles. Le fallback empeche toute page blanche.',
-          content: 'Les futures actualites pourront etre servies par RSS, sources officielles et Gemini cote backend.',
-          source: 'Backend V5',
-          publishedAt: new Date().toISOString(),
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
 app.get('/videos', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('MediaAgent', {
-      topic: 'videos et medias Coupe du Monde 2026',
-      message: 'Prepare un point videos et medias. N invente pas de lien video si aucune source ne le donne.',
-    });
-    res.json({
-      items: [
-        {
-          title: 'Videos CDM 2026',
-          content: result.content,
-          reliability: result.reliability,
-          updatedAt: result.timestamp,
-          source: 'MediaAgent + Gemini',
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchVideos();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          title: 'Videos CDM 2026',
-          content: 'Aucune video officielle disponible pour le moment. Les flux YouTube restent cote backend.',
-          reliability: 'unconfirmed',
-          updatedAt: new Date().toISOString(),
-          source: 'Backend V5',
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
 app.get('/interviews', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('InterviewAgent', {
-      playerName: 'un joueur africain a suivre',
-      occasion: 'avant la Coupe du Monde 2026',
-      message: 'Prepare un court point interviews sans inventer de citation directe.',
-    });
-    res.json({
-      items: [
-        {
-          title: 'Interviews CDM 2026',
-          content: result.content,
-          reliability: result.reliability,
-          updatedAt: result.timestamp,
-          source: 'InterviewAgent + Gemini',
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchInterviews();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          title: 'Interviews',
-          content: 'Aucune interview officielle disponible pour le moment. Les donnees locales restent affichees dans Android.',
-          reliability: 'unconfirmed',
-          updatedAt: new Date().toISOString(),
-          source: 'Backend V5',
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
 app.get('/injuries', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('InjuryAgent', {
-      teamName: 'equipes africaines et favoris CDM 2026',
-      message: 'Prepare un etat blessures prudent sans affirmer de blessure non confirmee.',
-    });
-    res.json({
-      items: [
-        {
-          title: 'Blessures CDM 2026',
-          content: result.content,
-          reliability: result.reliability,
-          updatedAt: result.timestamp,
-          source: 'InjuryAgent + Gemini',
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchInjuries();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          title: 'Blessures',
-          content: 'Aucune blessure confirmee par les sources serveur pour le moment.',
-          reliability: 'unconfirmed',
-          updatedAt: new Date().toISOString(),
-          source: 'Backend V5',
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
 app.get('/training', async (req, res) => {
   try {
-    const result = await agentOrchestrator.runAgent('TrainingAgent', {
-      teamName: 'equipes africaines CDM 2026',
-      message: 'Prepare un point entrainement prudent et utile.',
-    });
-    res.json({
-      items: [
-        {
-          title: 'Entrainements CDM 2026',
-          content: result.content,
-          reliability: result.reliability,
-          updatedAt: result.timestamp,
-          source: 'TrainingAgent + Gemini',
-          sources: result.sources,
-        },
-      ],
-    });
+    const result = await sourceFetcherService.fetchTraining();
+    sendSourceFeed(res, result);
   } catch {
-    res.json({
-      items: [
-        {
-          title: 'Entrainements',
-          content: 'Aucun rapport entrainement serveur disponible pour le moment. Les donnees locales restent affichees dans Android.',
-          reliability: 'unconfirmed',
-          updatedAt: new Date().toISOString(),
-          source: 'Backend V5',
-        },
-      ],
-    });
+    res.json({ items: [], message: 'Aucune donnée source disponible pour le moment' });
   }
 });
 
