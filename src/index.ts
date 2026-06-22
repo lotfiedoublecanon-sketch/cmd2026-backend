@@ -88,45 +88,28 @@ app.get('/sources/health', async (req: Request, res: Response) => {
   });
 });
 
-app.get('/articles', (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    items: [],
-    articles: [],
-    message: 'Aucune donnee source disponible pour le moment',
-    timestamp: new Date().toISOString(),
-  });
+app.get('/articles', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchArticles());
 });
 
-app.get('/news', (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    items: [],
-    message: 'Aucune donnee source disponible pour le moment',
-    timestamp: new Date().toISOString(),
-  });
+app.get('/news', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchNews());
 });
 
-app.get('/videos', (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    items: [],
-    videos: [],
-    message: 'Aucune video disponible pour le moment',
-    timestamp: new Date().toISOString(),
-  });
+app.get('/videos', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchVideos());
 });
 
-app.get('/interviews', (req: Request, res: Response) => {
-  res.json({ success: true, items: [], message: 'Aucune interview disponible pour le moment', timestamp: new Date().toISOString() });
+app.get('/interviews', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchInterviews());
 });
 
-app.get('/injuries', (req: Request, res: Response) => {
-  res.json({ success: true, items: [], message: 'Aucune blessure confirmee pour le moment', timestamp: new Date().toISOString() });
+app.get('/injuries', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchInjuries());
 });
 
-app.get('/training', (req: Request, res: Response) => {
-  res.json({ success: true, items: [], message: 'Aucun entrainement disponible pour le moment', timestamp: new Date().toISOString() });
+app.get('/training', async (req: Request, res: Response) => {
+  res.json(await sourceFetcherService.fetchTraining());
 });
 
 app.use('/ai', aiRoutes);
