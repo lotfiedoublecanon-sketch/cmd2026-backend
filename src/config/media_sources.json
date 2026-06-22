@@ -138,6 +138,26 @@
       "categories": ["news", "vidéos", "interviews", "entraînements", "chaînes TV"]
     },
     {
+      "id": "worldcup2026-tour",
+      "name": "World Cup 2026 Tour Public API",
+      "enabled": true,
+      "type": "public-api",
+      "homepage": "https://ay-worldcup2026.zeabur.app",
+      "healthUrl": "https://ay-worldcup2026.zeabur.app/api/public/v1/metadata",
+      "backendOnly": true,
+      "categories": ["matchs", "calendrier", "today", "upcoming", "next", "Afrique"]
+    },
+    {
+      "id": "wheniskickoff",
+      "name": "When Is Kickoff",
+      "enabled": true,
+      "type": "public-json",
+      "homepage": "https://wheniskickoff.com",
+      "healthUrl": "https://wheniskickoff.com/data/v1/matches.json",
+      "backendOnly": true,
+      "categories": ["matchs", "classements", "équipes", "stades", "chaînes TV", "Afrique"]
+    },
+    {
       "id": "thestatsapi",
       "name": "TheStatsAPI",
       "enabled": true,

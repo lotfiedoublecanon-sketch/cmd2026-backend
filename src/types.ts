@@ -44,6 +44,16 @@ export type TimelineEventType =
 
 // ---- Team Info ----
 
+export type SourceName =
+  | 'fapi'
+  | 'sportdb'
+  | 'merged'
+  | 'cache'
+  | 'backend'
+  | 'worldcup2026-tour'
+  | 'wheniskickoff'
+  | 'openfootball';
+
 export interface TeamInfo {
   id: string;
   name: string;
@@ -51,13 +61,15 @@ export interface TeamInfo {
   threeCharCode: string;
   logoUrl?: string;
   country?: string;
+  flag?: string;
 }
 
 // ---- Normalized Match ----
 
 export interface NormalizedMatch {
   id: string;
-  source: 'fapi' | 'sportdb' | 'merged';
+  source: SourceName;
+  sourceUsed?: SourceName | string;
   competitionId: string;
   competitionName: string;
   seasonName: string;
@@ -152,11 +164,17 @@ export interface StandingEntry {
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
-  source: 'fapi' | 'sportdb' | 'merged' | 'cache' | 'backend';
+  source: SourceName;
   sourceUsed?: string;
   cachedAt?: string;
   updatedAt?: string;
   error?: string;
+  cache?: {
+    status: 'hit' | 'miss' | 'stale' | 'bypass';
+    key?: string;
+    updatedAt?: string;
+    expiresAt?: string;
+  };
 }
 
 // ---- Gemini / Agents ----

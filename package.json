@@ -1,6 +1,6 @@
 {
   "name": "cdm2026-live-backend",
-  "version": "5.0.0",
+  "version": "5.0.10",
   "description": "Backend CDM 2026 Live by Redha - FAPI primary + SportDB fallback",
   "main": "dist/index.js",
   "scripts": {
