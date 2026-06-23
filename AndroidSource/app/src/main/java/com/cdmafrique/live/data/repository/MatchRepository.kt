@@ -189,9 +189,9 @@ class MatchRepository(
     }
 
     suspend fun getDiagnostic(): AppDiagnostic = try {
+        refreshCacheForDiagnostic()
         val health = api.checkHealth()
         val routes = api.checkDiagnosticRoutes()
-        val snapshot = cache?.snapshot()
         val globalOk = health?.status.equals("ok", ignoreCase = true) &&
             routes.any { it.path == "/matches/today" && it.ok && it.itemCount > 0 } &&
             routes.any { it.path == "/matches/upcoming?days=60" && it.ok && it.itemCount > 0 } &&
@@ -199,6 +199,7 @@ class MatchRepository(
             routes.any { it.path == "/news" && it.ok && it.itemCount > 0 } &&
             routes.any { it.path == "/videos" && it.ok && it.itemCount > 0 }
         if (globalOk) cache?.markFallbackUsed(false)
+        val snapshot = cache?.snapshot()
         AppDiagnostic(
             backendStatus = health?.status ?: "unreachable",
             backendUptime = health?.uptime,
@@ -254,6 +255,17 @@ class MatchRepository(
     }
 
     fun isLiveTrackingActive(): Boolean = cache?.snapshot()?.liveTrackingActive ?: false
+
+    private suspend fun refreshCacheForDiagnostic() {
+        runCatching { getTodayMatches() }
+        runCatching { getUpcomingMatches() }
+        runCatching { getStandings() }
+        runCatching { getArticles() }
+        runCatching { getVideos() }
+        runCatching { getGlobalInterviews() }
+        runCatching { getGlobalInjuries() }
+        runCatching { getGlobalTraining() }
+    }
 
     private fun userFriendlyMessage(e: Exception): String = when {
         e.message?.contains("resolve host", ignoreCase = true) == true -> temporaryError

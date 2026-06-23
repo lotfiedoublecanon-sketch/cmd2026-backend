@@ -31,6 +31,7 @@ data class CacheSnapshot(
         "A venir: $upcomingCount",
         "Groupes: $standingsCount",
         "News: $articlesCount",
+        "Articles: $articlesCount",
         "Videos: $videosCount",
         "Interviews: $interviewsCount",
         "Blessures: $injuriesCount",
