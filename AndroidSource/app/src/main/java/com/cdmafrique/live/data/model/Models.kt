@@ -1,8 +1,19 @@
 package com.cdmafrique.live.data.model
 
-import com.cdmafrique.live.data.api.*
-
-// ── Team ────────────────────────────────────────────────────
+import com.cdmafrique.live.data.api.AnalysisDto
+import com.cdmafrique.live.data.api.ArticleDto
+import com.cdmafrique.live.data.api.CommentaryItemDto
+import com.cdmafrique.live.data.api.ContentResultDto
+import com.cdmafrique.live.data.api.LineupPlayerDto
+import com.cdmafrique.live.data.api.MatchDto
+import com.cdmafrique.live.data.api.MatchEventDto
+import com.cdmafrique.live.data.api.MatchLineupsDto
+import com.cdmafrique.live.data.api.MatchStatsDto
+import com.cdmafrique.live.data.api.PredictionDto
+import com.cdmafrique.live.data.api.StandingEntryDto
+import com.cdmafrique.live.data.api.StandingGroupDto
+import com.cdmafrique.live.data.api.StatCategoryDto
+import com.cdmafrique.live.data.api.TeamDto
 
 data class Team(
     val id: String,
@@ -12,18 +23,16 @@ data class Team(
     val logo: String?
 )
 
-// ── Match ───────────────────────────────────────────────────
-
 enum class MatchStatus(val key: String, val display: String) {
-    SCHEDULED("SCHEDULED", "Programmé"),
+    SCHEDULED("SCHEDULED", "Programme"),
     LIVE("LIVE", "En direct"),
     HALF_TIME("HALF_TIME", "Mi-temps"),
-    SECOND_HALF("SECOND_HALF", "2ᵉ mi-temps"),
-    FINISHED("FINISHED", "Terminé"),
-    POSTPONED("POSTPONED", "Reporté"),
-    CANCELLED("CANCELLED", "Annulé"),
+    SECOND_HALF("SECOND_HALF", "2e mi-temps"),
+    FINISHED("FINISHED", "Termine"),
+    POSTPONED("POSTPONED", "Reporte"),
+    CANCELLED("CANCELLED", "Annule"),
     SUSPENDED("SUSPENDED", "Suspendu"),
-    UNKNOWN("UNKNOWN", "—");
+    UNKNOWN("UNKNOWN", "-");
 
     companion object {
         fun fromKey(key: String): MatchStatus = when (key.lowercase()) {
@@ -43,13 +52,13 @@ enum class MatchStatus(val key: String, val display: String) {
 
 enum class MatchPeriod(val display: String) {
     PRE_MATCH("Avant-match"),
-    FIRST_HALF("1ʳᵉ mi-temps"),
+    FIRST_HALF("1ere mi-temps"),
     HALF_TIME("Mi-temps"),
-    SECOND_HALF("2ᵉ mi-temps"),
+    SECOND_HALF("2e mi-temps"),
     EXTRA_TIME("Prolongations"),
     PENALTY_SHOOTOUT("Tirs au but"),
     FULL_TIME("Fin du match"),
-    UNKNOWN("—");
+    UNKNOWN("-");
 
     companion object {
         fun fromKey(key: String?): MatchPeriod = when (key?.lowercase()) {
@@ -80,21 +89,19 @@ data class Match(
     val round: String?
 )
 
-// ── Events ──────────────────────────────────────────────────
-
 enum class EventType(val key: String, val emoji: String, val display: String) {
-    GOAL("GOAL", "⚽", "But"),
-    OWN_GOAL("OWN_GOAL", "⚽", "CSC"),
-    PENALTY("PENALTY", "⚽", "Penalty"),
-    PENALTY_MISSED("PENALTY_MISSED", "❌", "Penalty raté"),
-    YELLOW_CARD("YELLOW_CARD", "🟨", "Carton jaune"),
-    RED_CARD("RED_CARD", "🟥", "Carton rouge"),
-    SECOND_YELLOW("SECOND_YELLOW", "🟨🟥", "2ᵉ jaune"),
-    SUBSTITUTION("SUBSTITUTION", "🔄", "Remplacement"),
-    VAR("VAR", "📺", "VAR"),
-    PERIOD_START("PERIOD_START", "▶️", "Début"),
-    PERIOD_END("PERIOD_END", "⏹️", "Fin"),
-    UNKNOWN("UNKNOWN", "•", "Événement");
+    GOAL("GOAL", "GOAL", "But"),
+    OWN_GOAL("OWN_GOAL", "GOAL", "CSC"),
+    PENALTY("PENALTY", "GOAL", "Penalty"),
+    PENALTY_MISSED("PENALTY_MISSED", "X", "Penalty rate"),
+    YELLOW_CARD("YELLOW_CARD", "YC", "Carton jaune"),
+    RED_CARD("RED_CARD", "RC", "Carton rouge"),
+    SECOND_YELLOW("SECOND_YELLOW", "YC/RC", "2e jaune"),
+    SUBSTITUTION("SUBSTITUTION", "SUB", "Remplacement"),
+    VAR("VAR", "VAR", "VAR"),
+    PERIOD_START("PERIOD_START", "START", "Debut"),
+    PERIOD_END("PERIOD_END", "END", "Fin"),
+    UNKNOWN("UNKNOWN", "-", "Evenement");
 
     companion object {
         fun fromKey(key: String): EventType = when (key.lowercase()) {
@@ -126,20 +133,8 @@ data class MatchEvent(
     val detail: String?
 )
 
-// ── Stats ───────────────────────────────────────────────────
-
-data class MatchStats(
-    val matchId: String,
-    val categories: List<StatCategory>
-)
-
-data class StatCategory(
-    val name: String,
-    val homeValue: String,
-    val awayValue: String
-)
-
-// ── Lineups ─────────────────────────────────────────────────
+data class MatchStats(val matchId: String, val categories: List<StatCategory>)
+data class StatCategory(val name: String, val homeValue: String, val awayValue: String)
 
 data class MatchLineups(
     val matchId: String,
@@ -159,12 +154,7 @@ data class LineupPlayer(
     val flag: String?
 )
 
-// ── Standings ───────────────────────────────────────────────
-
-data class StandingGroup(
-    val name: String,
-    val entries: List<StandingEntry>
-)
+data class StandingGroup(val name: String, val entries: List<StandingEntry>)
 
 data class StandingEntry(
     val teamId: String,
@@ -181,12 +171,10 @@ data class StandingEntry(
     val points: Int
 )
 
-// ── Content (Médias, Blessures, Interviews, Entraînements) ──
-
 enum class Reliability(val key: String, val display: String) {
     OFFICIAL("official", "Source officielle"),
     RELIABLE("reliable", "Info fiable"),
-    UNCONFIRMED("unconfirmed", "À confirmer");
+    UNCONFIRMED("unconfirmed", "A confirmer");
 
     companion object {
         fun fromKey(key: String): Reliability =
@@ -199,10 +187,9 @@ data class ContentResult(
     val content: String,
     val reliability: Reliability,
     val updatedAt: String?,
-    val source: String?
+    val source: String?,
+    val url: String? = null
 )
-
-// ── Analysis / Prediction ───────────────────────────────────
 
 data class Analysis(
     val matchId: String,
@@ -219,12 +206,7 @@ data class Prediction(
     val updatedAt: String?
 )
 
-data class CommentaryItem(
-    val minute: Int,
-    val text: String
-)
-
-// ── Diagnostic ──────────────────────────────────────────────
+data class CommentaryItem(val minute: Int, val text: String)
 
 data class AppDiagnostic(
     val backendStatus: String,
@@ -233,6 +215,12 @@ data class AppDiagnostic(
     val apiCallCount: Int,
     val lastError: String?,
     val appVersion: String,
+    val cacheSummary: String = "",
+    val lastSyncAt: String? = null,
+    val workManagerStatus: String = "Non planifie",
+    val foregroundServiceActive: Boolean = false,
+    val fcmTokenRegistered: Boolean = false,
+    val localFallbackUsed: Boolean = false,
     val routes: List<RouteDiagnostic> = emptyList()
 )
 
@@ -245,8 +233,6 @@ data class RouteDiagnostic(
     val message: String? = null
 )
 
-// ── Article ─────────────────────────────────────────────────
-
 data class Article(
     val id: String,
     val title: String,
@@ -254,20 +240,11 @@ data class Article(
     val content: String?,
     val imageUrl: String?,
     val publishedAt: String?,
-    val source: String?
+    val source: String?,
+    val url: String? = null
 )
 
-// ═══════════════════════════════════════════════════════════
-// DTO → Domain Mappers
-// ═══════════════════════════════════════════════════════════
-
-fun TeamDto.toDomain() = Team(
-    id = id,
-    name = name,
-    code = code,
-    flag = flag,
-    logo = logo
-)
+fun TeamDto.toDomain() = Team(id = id, name = name, code = code, flag = flag, logo = logo)
 
 fun MatchDto.toDomain() = Match(
     id = id,
@@ -296,16 +273,8 @@ fun MatchEventDto.toDomain() = MatchEvent(
     detail = detail
 )
 
-fun StatCategoryDto.toDomain() = StatCategory(
-    name = name,
-    homeValue = homeValue,
-    awayValue = awayValue
-)
-
-fun MatchStatsDto.toDomain() = MatchStats(
-    matchId = matchId,
-    categories = categories.map { it.toDomain() }
-)
+fun StatCategoryDto.toDomain() = StatCategory(name = name, homeValue = homeValue, awayValue = awayValue)
+fun MatchStatsDto.toDomain() = MatchStats(matchId = matchId, categories = categories.map { it.toDomain() })
 
 fun LineupPlayerDto.toDomain() = LineupPlayer(
     id = id,
@@ -340,17 +309,15 @@ fun StandingEntryDto.toDomain() = StandingEntry(
     points = points
 )
 
-fun StandingGroupDto.toDomain() = StandingGroup(
-    name = name,
-    entries = entries.map { it.toDomain() }
-)
+fun StandingGroupDto.toDomain() = StandingGroup(name = name, entries = entries.map { it.toDomain() })
 
 fun ContentResultDto.toDomain() = ContentResult(
     title = title.ifBlank { source ?: "Information" },
-    content = content ?: summary ?: url ?: "Aucune donnée source disponible pour le moment",
+    content = content ?: summary ?: url ?: "Aucune donnee source disponible pour le moment",
     reliability = Reliability.fromKey(reliability ?: if ((confidence ?: 0.0) >= 0.8) "reliable" else "unconfirmed"),
     updatedAt = updatedAt,
-    source = source ?: sourceType
+    source = source ?: sourceType,
+    url = url
 )
 
 fun AnalysisDto.toDomain() = Analysis(
@@ -368,16 +335,14 @@ fun PredictionDto.toDomain() = Prediction(
     updatedAt = updatedAt
 )
 
-fun CommentaryItemDto.toDomain() = CommentaryItem(
-    minute = minute,
-    text = text
-)
+fun CommentaryItemDto.toDomain() = CommentaryItem(minute = minute, text = text)
 
 fun ArticleDto.toDomain() = Article(
     id = id.ifBlank { "${source.orEmpty()}-${title.hashCode()}" },
-    title = title.ifBlank { source ?: "Actualité" },
+    title = title.ifBlank { source ?: "Actualite" },
     summary = summary,
     content = content ?: summary ?: url,
+    url = url,
     imageUrl = imageUrl,
     publishedAt = publishedAt,
     source = source ?: sourceType

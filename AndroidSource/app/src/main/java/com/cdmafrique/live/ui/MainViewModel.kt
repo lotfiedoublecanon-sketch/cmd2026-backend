@@ -1,8 +1,13 @@
 package com.cdmafrique.live.ui
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.cdmafrique.live.LiveTrackingForegroundService
+import com.cdmafrique.live.NotificationHelper
+import com.cdmafrique.live.background.SyncScheduler
 import com.cdmafrique.live.data.local.LocalWorldCupFallback
 import com.cdmafrique.live.data.model.*
 import com.cdmafrique.live.data.repository.MatchRepository
@@ -27,7 +32,7 @@ import kotlinx.coroutines.launch
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = MatchRepository()
+    private val repository = MatchRepository(application.applicationContext)
     private val localFallback = LocalWorldCupFallback(application.applicationContext)
 
     // ── Live Matches ────────────────────────────────────────
@@ -98,6 +103,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _liveTrackingEnabled = MutableStateFlow(false)
+    val liveTrackingEnabled: StateFlow<Boolean> = _liveTrackingEnabled.asStateFlow()
+
     // ── Polling ─────────────────────────────────────────────
     private var livePollingJob: Job? = null
     private var todayPollingJob: Job? = null
@@ -105,12 +113,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ── Initialization ──────────────────────────────────────
 
     init {
+        NotificationHelper.ensureChannels(application.applicationContext)
+        SyncScheduler.schedulePeriodic(application.applicationContext)
+        restoreCachedSnapshot()
         loadInitialData()
         registerFcmToken()
         subscribeToDefaultTopics()
     }
 
     fun loadInitialData() {
+        SyncScheduler.enqueueOneTimeSync(getApplication())
         viewModelScope.launch {
             _isLoading.value = true
             loadLiveMatches()
@@ -124,6 +136,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         startLivePolling()
     }
 
+    private fun restoreCachedSnapshot() {
+        _liveMatches.value = repository.cachedLiveMatches()
+        _todayMatches.value = repository.cachedTodayMatches()
+        _upcomingMatches.value = repository.cachedUpcomingMatches()
+        _standings.value = repository.cachedStandings()
+        _articles.value = repository.cachedArticles()
+        _mediaContent.value = repository.cachedVideos()
+        _interviewsContent.value = repository.cachedInterviews()
+        _injuriesContent.value = repository.cachedInjuries()
+        _trainingContent.value = repository.cachedTraining()
+        refreshCalendarFallback()
+    }
+
     // ── Live Matches ────────────────────────────────────────
     //
     // FIX : les erreurs de connexion ne sont plus propagées dans _error
@@ -133,14 +158,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadLiveMatches() {
         repository.getLiveMatches()
             .onSuccess { matches ->
-                _liveMatches.value = matches.ifEmpty {
-                    showLocalNotice()
-                    localFallback.liveMatches()
-                }
+                _liveMatches.value = matches
             }
             .onFailure {
-                showLocalNotice()
-                _liveMatches.value = localFallback.liveMatches()
+                _liveMatches.value = repository.cachedLiveMatches()
             }
         refreshCalendarFallback()
     }
@@ -184,6 +205,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshAll() {
         _error.value = null  // Effacer l'erreur au refresh
+        SyncScheduler.enqueueOneTimeSync(getApplication())
         loadInitialData()
     }
 
@@ -238,6 +260,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun showLocalNotice() {
+        repository.markFallbackUsed(true)
         _error.value = localFallback.localNotice()
     }
 
@@ -385,6 +408,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setLiveTrackingEnabled(enabled: Boolean) {
+        _liveTrackingEnabled.value = enabled
+        val context = getApplication<Application>().applicationContext
+        val intent = Intent(context, LiveTrackingForegroundService::class.java)
+        if (enabled) {
+            ContextCompat.startForegroundService(context, intent)
+        } else {
+            context.startService(intent.setAction(LiveTrackingForegroundService.ACTION_STOP))
+        }
+        viewModelScope.launch {
+            _diagnostic.value = repository.getDiagnostic()
+        }
+    }
+
     private fun registerFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
@@ -421,8 +458,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private val defaultNotificationTopics = listOf(
+            "global",
+            "worldcup2026",
             "algeria",
             "africa",
+            "live",
             "live_goals",
             "injuries",
             "interviews",

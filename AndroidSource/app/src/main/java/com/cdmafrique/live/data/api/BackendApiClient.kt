@@ -57,7 +57,7 @@ class BackendApiClient {
     }
 
     suspend fun getUpcomingMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
-        get("/matches/upcoming?days=30") ?: emptyList()
+        get("/matches/upcoming?days=60") ?: emptyList()
     }
 
     suspend fun getMatchById(matchId: String): MatchDto? = withContext(Dispatchers.IO) {
@@ -165,16 +165,18 @@ class BackendApiClient {
     // ── Health ──────────────────────────────────────────────
 
     suspend fun checkHealth(): HealthDto? = withContext(Dispatchers.IO) {
-        get("/diagnostic")
+        get("/health")
     }
 
     suspend fun checkDiagnosticRoutes(): List<RouteDiagnostic> = withContext(Dispatchers.IO) {
         listOf(
             "/health",
             "/diagnostic",
+            "/sources",
+            "/sources/health",
             "/matches/live",
             "/matches/today",
-            "/matches/upcoming",
+            "/matches/upcoming?days=60",
             "/matches/standings",
             "/news",
             "/articles",
@@ -298,13 +300,14 @@ class BackendApiClient {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 val count = countItems(body)
+                val source = extractSourceUsed(body)
                 val renderRoute = path == "/health" || path == "/diagnostic"
                 RouteDiagnostic(
                     path = path,
                     ok = response.isSuccessful,
                     httpCode = response.code,
                     itemCount = count,
-                    sourceUsed = if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
+                    sourceUsed = source ?: if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
                     message = if (response.isSuccessful) null else temporaryError
                 )
             }
@@ -324,6 +327,16 @@ class BackendApiClient {
         if (body.isBlank()) return 0
         val root = runCatching { JsonParser.parseString(body) }.getOrNull() ?: return 0
         return countJsonItems(root)
+    }
+
+    private fun extractSourceUsed(body: String): String? {
+        val root = runCatching { JsonParser.parseString(body) }.getOrNull() ?: return null
+        if (!root.isJsonObject) return null
+        val obj = root.asJsonObject
+        return obj.get("sourceUsed")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("source")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("metadata")?.takeIf { it.isJsonObject }?.asJsonObject
+                ?.get("sourceUsed")?.takeIf { !it.isJsonNull }?.asString
     }
 
     private fun countJsonItems(element: JsonElement?): Int {
