@@ -720,7 +720,7 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
         StatusLine("FCM token", if (diag.fcmTokenRegistered) "Enregistre" else "Non confirme")
         StatusLine("Fallback local", if (diag.localFallbackUsed) "Utilise" else "Non utilise")
         StatusLine("Derniere erreur", diag.lastError ?: "Aucune")
-        StatusLine("Secrets", "Caches cote backend")
+        StatusLine("Cles API", "Protegees cote backend - aucune cle visible")
     }
     InfoCard(
         title = "Architecture",
@@ -1068,9 +1068,16 @@ private fun StatRow(label: String, home: String, away: String) {
 
 @Composable
 private fun StatusLine(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = AfriqueMuted)
-        Text(value, color = AfriqueInk, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, color = AfriqueMuted, style = MaterialTheme.typography.labelLarge)
+        Text(
+            value,
+            color = AfriqueInk,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 8,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

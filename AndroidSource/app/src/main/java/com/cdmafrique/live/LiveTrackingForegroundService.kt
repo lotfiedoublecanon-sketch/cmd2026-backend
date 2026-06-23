@@ -46,7 +46,7 @@ class LiveTrackingForegroundService : Service() {
     }
 
     private fun startTracking() {
-        cache.setLiveTrackingEnabled(true)
+        cache.setLiveTrackingActive(true)
         startForeground(
             NOTIFICATION_ID,
             NotificationHelper.liveNotification(this, "Suivi live actif", "Recherche des matchs en direct.")
@@ -54,6 +54,7 @@ class LiveTrackingForegroundService : Service() {
         if (pollingJob?.isActive == true) return
         pollingJob = serviceScope.launch {
             while (isActive) {
+                cache.touchLiveTrackingHeartbeat()
                 val matches = repository.getLiveMatches().getOrDefault(emptyList())
                 val text = if (matches.isEmpty()) {
                     "Aucun match live confirme actuellement."
@@ -84,7 +85,7 @@ class LiveTrackingForegroundService : Service() {
     private fun stopTracking() {
         pollingJob?.cancel()
         pollingJob = null
-        if (::cache.isInitialized) cache.setLiveTrackingEnabled(false)
+        if (::cache.isInitialized) cache.setLiveTrackingActive(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

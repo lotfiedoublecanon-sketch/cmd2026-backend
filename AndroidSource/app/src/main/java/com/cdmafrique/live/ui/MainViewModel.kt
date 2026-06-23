@@ -137,6 +137,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun restoreCachedSnapshot() {
+        _liveTrackingEnabled.value = repository.isLiveTrackingActive()
         _liveMatches.value = repository.cachedLiveMatches()
         _todayMatches.value = repository.cachedTodayMatches()
         _upcomingMatches.value = repository.cachedUpcomingMatches()
@@ -404,6 +405,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadDiagnostic() {
         viewModelScope.launch {
+            _liveTrackingEnabled.value = repository.isLiveTrackingActive()
             _diagnostic.value = repository.getDiagnostic()
         }
     }

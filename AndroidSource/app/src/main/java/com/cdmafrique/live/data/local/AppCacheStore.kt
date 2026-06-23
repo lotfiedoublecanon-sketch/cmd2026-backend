@@ -22,7 +22,7 @@ data class CacheSnapshot(
     val lastSyncAt: String?,
     val localFallbackUsed: Boolean,
     val fcmTokenRegistered: Boolean,
-    val liveTrackingEnabled: Boolean,
+    val liveTrackingActive: Boolean,
     val workManagerStatus: String
 ) {
     fun summary(): String = listOf(
@@ -34,8 +34,8 @@ data class CacheSnapshot(
         "Videos: $videosCount",
         "Interviews: $interviewsCount",
         "Blessures: $injuriesCount",
-        "Entrainements: $trainingCount"
-    ).joinToString(" | ")
+        "Training: $trainingCount"
+    ).joinToString("\n")
 }
 
 class AppCacheStore(context: Context) {
@@ -82,11 +82,25 @@ class AppCacheStore(context: Context) {
         prefs.edit().putBoolean("fcmTokenRegistered", value).apply()
     }
 
-    fun setLiveTrackingEnabled(value: Boolean) {
-        prefs.edit().putBoolean("liveTrackingEnabled", value).apply()
+    fun setLiveTrackingActive(value: Boolean) {
+        prefs.edit()
+            .putBoolean("liveTrackingActive", value)
+            .putLong("liveTrackingHeartbeatAt", if (value) System.currentTimeMillis() else 0L)
+            .apply()
     }
 
-    fun isLiveTrackingEnabled(): Boolean = prefs.getBoolean("liveTrackingEnabled", false)
+    fun touchLiveTrackingHeartbeat() {
+        prefs.edit()
+            .putBoolean("liveTrackingActive", true)
+            .putLong("liveTrackingHeartbeatAt", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun isLiveTrackingActive(): Boolean {
+        val active = prefs.getBoolean("liveTrackingActive", false)
+        val heartbeatAt = prefs.getLong("liveTrackingHeartbeatAt", 0L)
+        return active && heartbeatAt > 0L && System.currentTimeMillis() - heartbeatAt < 120_000L
+    }
 
     fun markWorkScheduled() {
         prefs.edit()
@@ -108,7 +122,7 @@ class AppCacheStore(context: Context) {
         lastSyncAt = prefs.getString("lastSyncAt", null),
         localFallbackUsed = prefs.getBoolean("localFallbackUsed", false),
         fcmTokenRegistered = prefs.getBoolean("fcmTokenRegistered", false),
-        liveTrackingEnabled = prefs.getBoolean("liveTrackingEnabled", false),
+        liveTrackingActive = isLiveTrackingActive(),
         workManagerStatus = prefs.getString("workManagerStatus", "Non planifie") ?: "Non planifie"
     )
 

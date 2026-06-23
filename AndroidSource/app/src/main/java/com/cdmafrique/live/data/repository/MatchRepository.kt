@@ -36,19 +36,31 @@ class MatchRepository(
     suspend fun getTodayMatches(): Result<List<Match>> = try {
         val matches = api.getTodayMatches().map { it.toDomain() }
         if (matches.isNotEmpty()) cache?.saveMatches("today", matches)
+        if (matches.isNotEmpty()) cache?.markFallbackUsed(false)
         Result.success(matches.ifEmpty { cache?.getMatches("today").orEmpty() })
     } catch (e: Exception) {
         val cached = cache?.getMatches("today").orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
+        if (cached.isNotEmpty()) {
+            cache?.markFallbackUsed(false)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(userFriendlyMessage(e)))
+        }
     }
 
     suspend fun getUpcomingMatches(): Result<List<Match>> = try {
         val matches = api.getUpcomingMatches().map { it.toDomain() }
         if (matches.isNotEmpty()) cache?.saveMatches("upcoming", matches)
+        if (matches.isNotEmpty()) cache?.markFallbackUsed(false)
         Result.success(matches.ifEmpty { cache?.getMatches("upcoming").orEmpty() })
     } catch (e: Exception) {
         val cached = cache?.getMatches("upcoming").orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
+        if (cached.isNotEmpty()) {
+            cache?.markFallbackUsed(false)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(userFriendlyMessage(e)))
+        }
     }
 
     suspend fun getMatchById(matchId: String): Result<Match?> = try {
@@ -78,10 +90,16 @@ class MatchRepository(
     suspend fun getStandings(): Result<List<StandingGroup>> = try {
         val groups = api.getStandings()?.groups?.map { it.toDomain() }.orEmpty()
         if (groups.isNotEmpty()) cache?.saveStandings(groups)
+        if (groups.isNotEmpty()) cache?.markFallbackUsed(false)
         Result.success(groups.ifEmpty { cache?.getStandings().orEmpty() })
     } catch (e: Exception) {
         val cached = cache?.getStandings().orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
+        if (cached.isNotEmpty()) {
+            cache?.markFallbackUsed(false)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(userFriendlyMessage(e)))
+        }
     }
 
     suspend fun getCommentary(matchId: String): Result<List<CommentaryItem>> = try {
@@ -129,10 +147,16 @@ class MatchRepository(
     suspend fun getArticles(): Result<List<Article>> = try {
         val items = api.getArticles()?.items?.map { it.toDomain() }.orEmpty()
         if (items.isNotEmpty()) cache?.saveArticles(items)
+        if (items.isNotEmpty()) cache?.markFallbackUsed(false)
         Result.success(items.ifEmpty { cache?.getArticles().orEmpty() })
     } catch (e: Exception) {
         val cached = cache?.getArticles().orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
+        if (cached.isNotEmpty()) {
+            cache?.markFallbackUsed(false)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(userFriendlyMessage(e)))
+        }
     }
 
     suspend fun getVideos(): Result<List<ContentResult>> = getCachedContent("videos") { api.getVideos()?.items?.map { it.toDomain() }.orEmpty() }
@@ -152,29 +176,42 @@ class MatchRepository(
     ): Result<List<ContentResult>> = try {
         val items = remote()
         if (items.isNotEmpty()) cache?.saveContent(bucket, items)
+        if (items.isNotEmpty()) cache?.markFallbackUsed(false)
         Result.success(items.ifEmpty { cache?.getContent(bucket).orEmpty() })
     } catch (e: Exception) {
         val cached = cache?.getContent(bucket).orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
+        if (cached.isNotEmpty()) {
+            cache?.markFallbackUsed(false)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(userFriendlyMessage(e)))
+        }
     }
 
     suspend fun getDiagnostic(): AppDiagnostic = try {
         val health = api.checkHealth()
         val routes = api.checkDiagnosticRoutes()
         val snapshot = cache?.snapshot()
+        val globalOk = health?.status.equals("ok", ignoreCase = true) &&
+            routes.any { it.path == "/matches/today" && it.ok && it.itemCount > 0 } &&
+            routes.any { it.path == "/matches/upcoming?days=60" && it.ok && it.itemCount > 0 } &&
+            routes.any { it.path == "/matches/standings" && it.ok && it.itemCount >= 12 } &&
+            routes.any { it.path == "/news" && it.ok && it.itemCount > 0 } &&
+            routes.any { it.path == "/videos" && it.ok && it.itemCount > 0 }
+        if (globalOk) cache?.markFallbackUsed(false)
         AppDiagnostic(
             backendStatus = health?.status ?: "unreachable",
             backendUptime = health?.uptime,
             backendVersion = health?.version,
             apiCallCount = api.apiCallCount,
-            lastError = api.lastError,
+            lastError = if (globalOk) null else api.lastError,
             appVersion = BuildConfig.VERSION_NAME,
             cacheSummary = snapshot?.summary().orEmpty(),
             lastSyncAt = snapshot?.lastSyncAt,
             workManagerStatus = snapshot?.workManagerStatus ?: "Non planifie",
-            foregroundServiceActive = snapshot?.liveTrackingEnabled ?: false,
+            foregroundServiceActive = snapshot?.liveTrackingActive ?: false,
             fcmTokenRegistered = snapshot?.fcmTokenRegistered ?: false,
-            localFallbackUsed = snapshot?.localFallbackUsed ?: false,
+            localFallbackUsed = if (globalOk) false else snapshot?.localFallbackUsed ?: false,
             routes = routes
         )
     } catch (e: Exception) {
@@ -189,7 +226,7 @@ class MatchRepository(
             cacheSummary = snapshot?.summary().orEmpty(),
             lastSyncAt = snapshot?.lastSyncAt,
             workManagerStatus = snapshot?.workManagerStatus ?: "Non planifie",
-            foregroundServiceActive = snapshot?.liveTrackingEnabled ?: false,
+            foregroundServiceActive = snapshot?.liveTrackingActive ?: false,
             fcmTokenRegistered = snapshot?.fcmTokenRegistered ?: false,
             localFallbackUsed = snapshot?.localFallbackUsed ?: false,
             routes = emptyList()
@@ -215,6 +252,8 @@ class MatchRepository(
     fun markFallbackUsed(value: Boolean) {
         cache?.markFallbackUsed(value)
     }
+
+    fun isLiveTrackingActive(): Boolean = cache?.snapshot()?.liveTrackingActive ?: false
 
     private fun userFriendlyMessage(e: Exception): String = when {
         e.message?.contains("resolve host", ignoreCase = true) == true -> temporaryError
