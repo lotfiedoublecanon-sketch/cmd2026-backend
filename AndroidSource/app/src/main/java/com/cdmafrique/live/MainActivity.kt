@@ -81,6 +81,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +90,7 @@ import com.cdmafrique.live.data.model.Analysis
 import com.cdmafrique.live.data.model.AppDiagnostic
 import com.cdmafrique.live.data.model.Article
 import com.cdmafrique.live.data.model.ContentResult
+import com.cdmafrique.live.data.model.DataSource
 import com.cdmafrique.live.data.model.Match
 import com.cdmafrique.live.data.model.MatchEvent
 import com.cdmafrique.live.data.model.MatchLineups
@@ -97,6 +99,7 @@ import com.cdmafrique.live.data.model.MatchStatus
 import com.cdmafrique.live.data.model.Prediction
 import com.cdmafrique.live.data.model.StandingGroup
 import com.cdmafrique.live.ui.MainViewModel
+import com.cdmafrique.live.ui.ScreenDataState
 import com.cdmafrique.live.ui.theme.AfriqueGold
 import com.cdmafrique.live.ui.theme.AfriqueGreen
 import com.cdmafrique.live.ui.theme.AfriqueInk
@@ -260,6 +263,7 @@ private fun AppBody(
     val standings by viewModel.standings.collectAsState()
     val articles by viewModel.articles.collectAsState()
     val diagnostic by viewModel.diagnostic.collectAsState()
+    val liveTrackingEnabled by viewModel.liveTrackingEnabled.collectAsState()
     val selectedMatch by viewModel.selectedMatch.collectAsState()
     val matchEvents by viewModel.matchEvents.collectAsState()
     val matchStats by viewModel.matchStats.collectAsState()
@@ -272,12 +276,26 @@ private fun AppBody(
     val interviews by viewModel.interviewsContent.collectAsState()
     val training by viewModel.trainingContent.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val screenStates by viewModel.screenStates.collectAsState()
+    val currentScreenState = screenStates[screen.name]
 
     LaunchedEffect(Unit) {
         viewModel.loadDiagnostic()
         viewModel.loadArticles()
         viewModel.loadStandings()
+        viewModel.loadAllGlobalContent()
+    }
+
+    LaunchedEffect(screen) {
+        when (screen) {
+            AppScreen.News -> viewModel.loadArticles()
+            AppScreen.Videos -> viewModel.loadVideos()
+            AppScreen.Interviews -> viewModel.loadGlobalInterviews()
+            AppScreen.Injuries -> viewModel.loadGlobalInjuries()
+            AppScreen.Training -> viewModel.loadGlobalTraining()
+            AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+            else -> Unit
+        }
     }
 
     val openMatch: (Match) -> Unit = { match ->
@@ -293,12 +311,13 @@ private fun AppBody(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (error != null) {
+        val currentNotice = currentScreenState?.noticeMessage
+        if (currentNotice != null) {
             NoticeCard(
-                title = "Connexion",
-                message = error ?: "",
-                actionLabel = "Masquer",
-                onAction = viewModel::clearError
+                title = currentScreenState.source.display,
+                message = currentNotice,
+                actionLabel = "Reessayer",
+                onAction = retryForScreen(screen, viewModel)
             )
         }
 
@@ -317,6 +336,9 @@ private fun AppBody(
                 live = liveMatches,
                 today = todayMatches,
                 upcoming = upcomingMatches,
+                liveState = screenStates["Live"],
+                todayState = screenStates["Today"],
+                upcomingState = screenStates["Upcoming"],
                 isLoading = isLoading,
                 onRefresh = viewModel::refreshAll,
                 onMatchClick = openMatch
@@ -354,34 +376,63 @@ private fun AppBody(
             AppScreen.Videos -> SimpleContentScreen(
                 title = "Videos",
                 items = media,
-                empty = "Aucune video disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune video disponible pour le moment."),
+                onRetry = viewModel::loadVideos
             )
             AppScreen.Interviews -> SimpleContentScreen(
                 title = "Interviews",
                 items = interviews,
-                empty = "Aucune interview disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune interview disponible pour le moment."),
+                onRetry = viewModel::loadGlobalInterviews
             )
             AppScreen.Injuries -> SimpleContentScreen(
                 title = "Blessures",
                 items = injuries,
-                empty = "Aucune blessure confirmee pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune blessure confirmee pour le moment."),
+                onRetry = viewModel::loadGlobalInjuries
             )
             AppScreen.Training -> SimpleContentScreen(
                 title = "Entrainements",
                 items = training,
-                empty = "Aucune information entrainement disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune information entrainement disponible pour le moment."),
+                onRetry = viewModel::loadGlobalTraining
             )
-            AppScreen.Notifications -> NotificationSettingsScreen()
-            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, viewModel::loadDiagnostic)
+            AppScreen.Notifications -> NotificationSettingsScreen(
+                liveTrackingEnabled = liveTrackingEnabled,
+                onLiveTrackingChanged = viewModel::setLiveTrackingEnabled
+            )
+            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, screenStates, viewModel::loadDiagnostic)
             AppScreen.Widget -> WidgetInfoScreen()
             AppScreen.Settings -> SettingsScreenV5()
         }
         FooterCard()
     }
+}
+
+private fun retryForScreen(screen: AppScreen, viewModel: MainViewModel): () -> Unit = {
+    when (screen) {
+        AppScreen.News -> viewModel.loadArticles()
+        AppScreen.Videos -> viewModel.loadVideos()
+        AppScreen.Interviews -> viewModel.loadGlobalInterviews()
+        AppScreen.Injuries -> viewModel.loadGlobalInjuries()
+        AppScreen.Training -> viewModel.loadGlobalTraining()
+        AppScreen.Standings -> viewModel.loadStandings()
+        AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+        else -> viewModel.refreshAll()
+    }
+}
+
+private fun emptyMessageFor(state: ScreenDataState?, defaultMessage: String): String =
+    when (state?.source) {
+        DataSource.EMPTY_SERVER -> "Aucune donnee serveur disponible pour le moment."
+        DataSource.ERROR -> state.errorMessage ?: "Donnees indisponibles pour cet ecran."
+        else -> defaultMessage
+    }
+
+private fun sourceSummary(state: ScreenDataState?): String {
+    if (state == null) return "Non charge"
+    val suffix = if (state.items == 1) "element" else "elements"
+    return "${state.source.display} - ${state.items} $suffix"
 }
 
 @Composable
@@ -436,6 +487,9 @@ private fun LiveScreenV5(
     live: List<Match>,
     today: List<Match>,
     upcoming: List<Match>,
+    liveState: ScreenDataState?,
+    todayState: ScreenDataState?,
+    upcomingState: ScreenDataState?,
     isLoading: Boolean,
     onRefresh: () -> Unit,
     onMatchClick: (Match) -> Unit
@@ -443,6 +497,7 @@ private fun LiveScreenV5(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Direct", "Aujourd'hui", "A venir")
     val lists = listOf(live, today, upcoming)
+    val states = listOf(liveState, todayState, upcomingState)
     val emptyMessages = listOf(
         "Aucun match en direct pour le moment.",
         "Aucun match aujourd'hui.",
@@ -458,6 +513,7 @@ private fun LiveScreenV5(
             )
         }
     }
+    InfoCard("Source ${tabs[selectedTab]}", sourceSummary(states[selectedTab]))
     MatchListBlock(
         matches = lists[selectedTab],
         empty = emptyMessages[selectedTab],
@@ -642,8 +698,24 @@ private fun SimpleContentInline(title: String, items: List<ContentResult>, empty
 }
 
 @Composable
-private fun NotificationSettingsScreen() {
+private fun NotificationSettingsScreen(
+    liveTrackingEnabled: Boolean,
+    onLiveTrackingChanged: (Boolean) -> Unit
+) {
     SectionTitle("Notifications")
+    CardShell {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Suivi live arriere-plan", style = MaterialTheme.typography.titleMedium)
+                Text("Notification persistante et polling live uniquement si active.", color = AfriqueMuted)
+            }
+            Switch(checked = liveTrackingEnabled, onCheckedChange = onLiveTrackingChanged)
+        }
+    }
     val options = listOf("Algerie", "Afrique", "Toutes les equipes", "Blessures", "Interviews", "Entrainements", "Buts", "Resultats")
     options.forEach { label ->
         var checked by remember(label) { mutableStateOf(label in listOf("Algerie", "Afrique", "Buts", "Resultats")) }
@@ -664,7 +736,11 @@ private fun NotificationSettingsScreen() {
 }
 
 @Composable
-private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
+private fun DiagnosticScreenV5(
+    diag: AppDiagnostic?,
+    screenStates: Map<String, ScreenDataState>,
+    onRetry: () -> Unit
+) {
     SectionTitle("Diagnostic")
     CardShell {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -686,13 +762,40 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
         EmptyState("Diagnostic en chargement.", "Reessayer", onRetry)
         return
     }
+    val screenFallbackUsed = screenStates.values.any { it.source == DataSource.LOCAL_FALLBACK }
     CardShell {
         StatusLine("Backend", diag.backendStatus)
         StatusLine("Version app", diag.appVersion)
         StatusLine("URL", BuildConfig.BACKEND_URL)
         StatusLine("Uptime", diag.backendUptime?.let { "%.1f s".format(it) } ?: "-")
+        StatusLine("Version backend", diag.backendVersion ?: "-")
+        StatusLine("Derniere sync", diag.lastSyncAt ?: "-")
+        StatusLine("Cache", diag.cacheSummary.ifBlank { "Vide" })
+        StatusLine("WorkManager", diag.workManagerStatus)
+        StatusLine("Suivi live", if (diag.foregroundServiceActive) "Actif" else "Arrete")
+        StatusLine("FCM token", if (diag.fcmTokenRegistered) "Enregistre" else "Non confirme")
+        StatusLine("Fallback local", if (screenFallbackUsed || diag.localFallbackUsed) "Utilise" else "Non utilise")
         StatusLine("Derniere erreur", diag.lastError ?: "Aucune")
         StatusLine("Secrets", "Caches cote backend")
+    }
+    CardShell {
+        Text("Sources ecrans", style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
+        listOf(
+            "Home",
+            "Live",
+            "Today",
+            "Upcoming",
+            "Calendar",
+            "Africa",
+            "News",
+            "Videos",
+            "Interviews",
+            "Injuries",
+            "Training",
+            "Standings"
+        ).forEach { key ->
+            StatusLine(key, sourceSummary(screenStates[key]))
+        }
     }
     InfoCard(
         title = "Architecture",
@@ -927,21 +1030,31 @@ private fun StandingGroupCard(group: StandingGroup, compact: Boolean) {
 
 @Composable
 private fun ArticleCard(article: Article) {
-    CardShell {
+    val uriHandler = LocalUriHandler.current
+    val url = safeExternalUrl(article.url)
+    CardShell(
+        modifier = if (url != null) Modifier.clickable { uriHandler.openUri(url) } else Modifier
+    ) {
         Text(article.title, style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
         if (!article.summary.isNullOrBlank()) {
             Text(article.summary, color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
         }
         Text(article.source ?: "Backend", color = AfriqueGreen, style = MaterialTheme.typography.labelLarge)
+        Text(if (url != null) "Ouvrir la source" else "Source sans lien public", color = AfriqueMuted, style = MaterialTheme.typography.labelSmall)
     }
 }
 
 @Composable
 private fun ContentCard(item: ContentResult) {
-    CardShell {
+    val uriHandler = LocalUriHandler.current
+    val url = safeExternalUrl(item.url)
+    CardShell(
+        modifier = if (url != null) Modifier.clickable { uriHandler.openUri(url) } else Modifier
+    ) {
         Text(item.title, style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
         Text(item.content, color = AfriqueMuted, style = MaterialTheme.typography.bodyMedium)
         Text(item.source ?: item.reliability.display, color = AfriqueGreen, style = MaterialTheme.typography.labelLarge)
+        Text(if (url != null) "Ouvrir la source" else "Source sans lien public", color = AfriqueMuted, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -1005,11 +1118,11 @@ private fun QuickCard(label: String, icon: ImageVector, modifier: Modifier = Mod
 }
 
 @Composable
-private fun CardShell(content: @Composable ColumnScope.() -> Unit) {
+private fun CardShell(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .border(1.dp, AfriqueLine, RoundedCornerShape(8.dp))
     ) {
@@ -1079,4 +1192,11 @@ private fun formatKickoff(raw: String?): String {
             .withZone(ZoneId.systemDefault())
             .format(Instant.parse(raw))
     }.getOrDefault(raw.replace("T", " ").replace("Z", ""))
+}
+
+private fun safeExternalUrl(raw: String?): String? {
+    val value = raw?.trim().orEmpty()
+    return value.takeIf {
+        it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true)
+    }
 }

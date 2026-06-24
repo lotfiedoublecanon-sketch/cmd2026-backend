@@ -4,6 +4,7 @@ import com.cdmafrique.live.BuildConfig
 import com.cdmafrique.live.data.model.RouteDiagnostic
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
@@ -57,7 +58,7 @@ class BackendApiClient {
     }
 
     suspend fun getUpcomingMatches(): List<MatchDto> = withContext(Dispatchers.IO) {
-        get("/matches/upcoming?days=30") ?: emptyList()
+        get("/matches/upcoming?days=60") ?: emptyList()
     }
 
     suspend fun getMatchById(matchId: String): MatchDto? = withContext(Dispatchers.IO) {
@@ -117,23 +118,23 @@ class BackendApiClient {
     }
 
     suspend fun getArticles(): ArticleListDto? = withContext(Dispatchers.IO) {
-        get("/news") ?: get("/articles")
+        getArticleList("/news") ?: getArticleList("/articles")
     }
 
     suspend fun getVideos(): ContentListDto? = withContext(Dispatchers.IO) {
-        get("/videos")
+        getContentList("/videos", "videos")
     }
 
     suspend fun getGlobalInterviews(): ContentListDto? = withContext(Dispatchers.IO) {
-        get("/interviews")
+        getContentList("/interviews", "interviews")
     }
 
     suspend fun getGlobalInjuries(): ContentListDto? = withContext(Dispatchers.IO) {
-        get("/injuries")
+        getContentList("/injuries", "injuries")
     }
 
     suspend fun getGlobalTraining(): ContentListDto? = withContext(Dispatchers.IO) {
-        get("/training")
+        getContentList("/training", "training")
     }
 
     // ── Trust / Reliability ─────────────────────────────────
@@ -165,16 +166,18 @@ class BackendApiClient {
     // ── Health ──────────────────────────────────────────────
 
     suspend fun checkHealth(): HealthDto? = withContext(Dispatchers.IO) {
-        get("/diagnostic")
+        get("/health")
     }
 
     suspend fun checkDiagnosticRoutes(): List<RouteDiagnostic> = withContext(Dispatchers.IO) {
         listOf(
             "/health",
             "/diagnostic",
+            "/sources",
+            "/sources/health",
             "/matches/live",
             "/matches/today",
-            "/matches/upcoming",
+            "/matches/upcoming?days=60",
             "/matches/standings",
             "/news",
             "/articles",
@@ -211,8 +214,14 @@ class BackendApiClient {
                 }
                 return null
             }
+            lastError = null
 
             val root = JsonParser.parseString(body)
+
+            if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.get("success").asBoolean == false) {
+                lastError = temporaryError
+                return null
+            }
 
             // Extraire le payload : si le backend envoie { success, data }, prendre data
             val payload = if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.has("data")) {
@@ -244,7 +253,8 @@ class BackendApiClient {
                     return try {
                         gson.fromJson<T>(payload, type)
                     } catch (e: JsonSyntaxException) {
-                        emptyList<Any>() as T
+                        lastError = temporaryError
+                        null
                     }
                 } else {
                     // T attend un objet mais on a un tableau
@@ -256,6 +266,7 @@ class BackendApiClient {
                     return try {
                         gson.fromJson<T>(payload.asJsonArray[0], object : TypeToken<T>() {}.type)
                     } catch (e: Exception) {
+                        lastError = temporaryError
                         null
                     }
                 }
@@ -298,13 +309,14 @@ class BackendApiClient {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 val count = countItems(body)
+                val source = extractSourceUsed(body)
                 val renderRoute = path == "/health" || path == "/diagnostic"
                 RouteDiagnostic(
                     path = path,
                     ok = response.isSuccessful,
                     httpCode = response.code,
                     itemCount = count,
-                    sourceUsed = if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
+                    sourceUsed = source ?: if (response.isSuccessful && (count > 0 || renderRoute)) "Render" else "Local",
                     message = if (response.isSuccessful) null else temporaryError
                 )
             }
@@ -326,6 +338,83 @@ class BackendApiClient {
         return countJsonItems(root)
     }
 
+    private fun getContentList(path: String, primaryKey: String): ContentListDto? {
+        val root = getJson(path) ?: return null
+        val array = extractArray(root, primaryKey, "items", "data", "videos", "articles")
+        val items = array?.mapNotNull { element ->
+            runCatching { gson.fromJson(element, ContentResultDto::class.java) }.getOrNull()
+        }.orEmpty()
+        return ContentListDto(items)
+    }
+
+    private fun getArticleList(path: String): ArticleListDto? {
+        val root = getJson(path) ?: return null
+        val array = extractArray(root, "articles", "items", "data", "news")
+        val items = array?.mapNotNull { element ->
+            runCatching { gson.fromJson(element, ArticleDto::class.java) }.getOrNull()
+        }.orEmpty()
+        return ArticleListDto(items)
+    }
+
+    private fun getJson(path: String): JsonElement? {
+        val request = Request.Builder()
+            .url("$baseUrl$path")
+            .get()
+            .build()
+        apiCallCount++
+        return try {
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                if (!response.isSuccessful || body == null) {
+                    lastError = temporaryError
+                    null
+                } else {
+                    val root = JsonParser.parseString(body)
+                    if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.get("success").asBoolean == false) {
+                        lastError = temporaryError
+                        null
+                    } else {
+                        lastError = null
+                        root
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            lastError = classifyError(e)
+            null
+        }
+    }
+
+    private fun extractArray(root: JsonElement, vararg keys: String): JsonArray? {
+        if (root.isJsonArray) return root.asJsonArray
+        if (!root.isJsonObject) return null
+        val obj = root.asJsonObject
+        val payload = if (obj.has("success") && obj.has("data")) obj.get("data") else root
+        if (payload.isJsonArray) return payload.asJsonArray
+        if (!payload.isJsonObject) return null
+        val payloadObj = payload.asJsonObject
+        keys.forEach { key ->
+            val child = payloadObj.get(key)
+            if (child != null && !child.isJsonNull) {
+                if (child.isJsonArray) return child.asJsonArray
+                if (child.isJsonObject) {
+                    extractArray(child, *keys)?.let { return it }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun extractSourceUsed(body: String): String? {
+        val root = runCatching { JsonParser.parseString(body) }.getOrNull() ?: return null
+        if (!root.isJsonObject) return null
+        val obj = root.asJsonObject
+        return obj.get("sourceUsed")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("source")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("metadata")?.takeIf { it.isJsonObject }?.asJsonObject
+                ?.get("sourceUsed")?.takeIf { !it.isJsonNull }?.asString
+    }
+
     private fun countJsonItems(element: JsonElement?): Int {
         if (element == null || element.isJsonNull) return 0
         if (element.isJsonArray) return element.asJsonArray.size()
@@ -340,6 +429,15 @@ class BackendApiClient {
 
         val groups = obj.get("groups")
         if (groups != null && !groups.isJsonNull) return countJsonItems(groups)
+
+        val videos = obj.get("videos")
+        if (videos != null && !videos.isJsonNull) return countJsonItems(videos)
+
+        val articles = obj.get("articles")
+        if (articles != null && !articles.isJsonNull) return countJsonItems(articles)
+
+        val news = obj.get("news")
+        if (news != null && !news.isJsonNull) return countJsonItems(news)
 
         return 1
     }
