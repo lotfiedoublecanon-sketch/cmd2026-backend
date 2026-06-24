@@ -9,7 +9,19 @@
       "type": "official",
       "homepage": "https://www.fifa.com",
       "healthUrl": "https://www.fifa.com",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "blessures", "entraînements", "cartons", "suspensions"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "cartons",
+        "suspensions"
+      ]
     },
     {
       "id": "uefa",
@@ -18,7 +30,19 @@
       "type": "official",
       "homepage": "https://www.uefa.com",
       "healthUrl": "https://www.uefa.com",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "blessures", "entraînements", "cartons", "suspensions"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "cartons",
+        "suspensions"
+      ]
     },
     {
       "id": "faf-algerie",
@@ -27,7 +51,17 @@
       "type": "official",
       "homepage": "https://www.faf.dz",
       "healthUrl": "https://www.faf.dz",
-      "categories": ["scores", "live", "matchs", "news", "vidéos", "interviews", "blessures", "entraînements", "Algérie"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "Algérie"
+      ]
     },
     {
       "id": "caf",
@@ -36,7 +70,18 @@
       "type": "official",
       "homepage": "https://www.cafonline.com",
       "healthUrl": "https://www.cafonline.com",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "cartons", "suspensions", "Algérie"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "cartons",
+        "suspensions",
+        "Algérie"
+      ]
     },
     {
       "id": "rmc-sport",
@@ -45,7 +90,14 @@
       "type": "media",
       "homepage": "https://rmcsport.bfmtv.com",
       "healthUrl": "https://rmcsport.bfmtv.com",
-      "categories": ["news", "vidéos", "interviews", "blessures", "entraînements", "chaînes TV"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "chaînes TV"
+      ]
     },
     {
       "id": "lequipe",
@@ -54,7 +106,20 @@
       "type": "media",
       "homepage": "https://www.lequipe.fr/Football/",
       "healthUrl": "https://www.lequipe.fr/Football/",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "blessures", "entraînements", "cartons", "suspensions", "chaînes TV"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "cartons",
+        "suspensions",
+        "chaînes TV"
+      ]
     },
     {
       "id": "foot-mercato",
@@ -63,7 +128,15 @@
       "type": "media",
       "homepage": "https://www.footmercato.net",
       "healthUrl": "https://www.footmercato.net",
-      "categories": ["news", "vidéos", "interviews", "blessures", "entraînements", "cartons", "suspensions"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "cartons",
+        "suspensions"
+      ]
     },
     {
       "id": "france24",
@@ -72,7 +145,13 @@
       "type": "media",
       "homepage": "https://www.france24.com/fr/sports/",
       "healthUrl": "https://www.france24.com/fr/sports/",
-      "categories": ["news", "vidéos", "interviews", "Algérie", "chaînes TV"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "Algérie",
+        "chaînes TV"
+      ]
     },
     {
       "id": "franceinfo",
@@ -81,7 +160,14 @@
       "type": "media",
       "homepage": "https://www.francetvinfo.fr/sports/foot/",
       "healthUrl": "https://www.francetvinfo.fr/sports/foot/",
-      "categories": ["news", "vidéos", "interviews", "blessures", "entraînements", "chaînes TV"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "chaînes TV"
+      ]
     },
     {
       "id": "le-monde-sport",
@@ -90,7 +176,13 @@
       "type": "media",
       "homepage": "https://www.lemonde.fr/sport/",
       "healthUrl": "https://www.lemonde.fr/sport/",
-      "categories": ["news", "interviews", "blessures", "entraînements", "suspensions"]
+      "categories": [
+        "news",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "suspensions"
+      ]
     },
     {
       "id": "rfi",
@@ -99,7 +191,13 @@
       "type": "media",
       "homepage": "https://www.rfi.fr/fr/sports/",
       "healthUrl": "https://www.rfi.fr/fr/sports/",
-      "categories": ["news", "vidéos", "interviews", "Algérie", "chaînes TV"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "Algérie",
+        "chaînes TV"
+      ]
     },
     {
       "id": "dzfoot",
@@ -108,7 +206,18 @@
       "type": "media",
       "homepage": "https://www.dzfoot.com",
       "healthUrl": "https://www.dzfoot.com",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "blessures", "entraînements", "Algérie"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "Algérie"
+      ]
     },
     {
       "id": "google-news-rss",
@@ -117,7 +226,21 @@
       "type": "aggregator",
       "homepage": "https://news.google.com",
       "healthUrl": "https://news.google.com/rss/search?q=Coupe%20du%20Monde%202026%20football&hl=fr&gl=FR&ceid=FR:fr",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews", "blessures", "entraînements", "cartons", "suspensions", "Algérie", "chaînes TV"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "cartons",
+        "suspensions",
+        "Algérie",
+        "chaînes TV"
+      ]
     },
     {
       "id": "gdelt",
@@ -126,7 +249,14 @@
       "type": "open-data",
       "homepage": "https://www.gdeltproject.org",
       "healthUrl": "https://api.gdeltproject.org/api/v2/doc/doc?query=football%20world%20cup%202026&mode=artlist&format=json",
-      "categories": ["news", "interviews", "blessures", "entraînements", "suspensions", "Algérie"]
+      "categories": [
+        "news",
+        "interviews",
+        "blessures",
+        "entraînements",
+        "suspensions",
+        "Algérie"
+      ]
     },
     {
       "id": "youtube",
@@ -135,7 +265,13 @@
       "type": "media",
       "homepage": "https://www.youtube.com",
       "healthUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCpcTrCXblq78GZrTUTLWeBw",
-      "categories": ["news", "vidéos", "interviews", "entraînements", "chaînes TV"]
+      "categories": [
+        "news",
+        "vidéos",
+        "interviews",
+        "entraînements",
+        "chaînes TV"
+      ]
     },
     {
       "id": "worldcup2026-tour",
@@ -145,7 +281,14 @@
       "homepage": "https://ay-worldcup2026.zeabur.app",
       "healthUrl": "https://ay-worldcup2026.zeabur.app/api/public/v1/metadata",
       "backendOnly": true,
-      "categories": ["matchs", "calendrier", "today", "upcoming", "next", "Afrique"]
+      "categories": [
+        "matchs",
+        "calendrier",
+        "today",
+        "upcoming",
+        "next",
+        "Afrique"
+      ]
     },
     {
       "id": "wheniskickoff",
@@ -155,7 +298,14 @@
       "homepage": "https://wheniskickoff.com",
       "healthUrl": "https://wheniskickoff.com/data/v1/matches.json",
       "backendOnly": true,
-      "categories": ["matchs", "classements", "équipes", "stades", "chaînes TV", "Afrique"]
+      "categories": [
+        "matchs",
+        "classements",
+        "équipes",
+        "stades",
+        "chaînes TV",
+        "Afrique"
+      ]
     },
     {
       "id": "thestatsapi",
@@ -164,7 +314,14 @@
       "type": "sports-data",
       "homepage": "https://thestatsapi.com",
       "healthUrl": "https://thestatsapi.com",
-      "categories": ["scores", "live", "matchs", "classements", "cartons", "suspensions"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "cartons",
+        "suspensions"
+      ]
     },
     {
       "id": "thesportsdb",
@@ -173,7 +330,15 @@
       "type": "sports-data",
       "homepage": "https://www.thesportsdb.com",
       "healthUrl": "https://www.thesportsdb.com",
-      "categories": ["scores", "live", "matchs", "classements", "news", "vidéos", "interviews"]
+      "categories": [
+        "scores",
+        "live",
+        "matchs",
+        "classements",
+        "news",
+        "vidéos",
+        "interviews"
+      ]
     },
     {
       "id": "openfootball",
@@ -182,18 +347,11 @@
       "type": "open-data",
       "homepage": "https://github.com/openfootball/worldcup",
       "healthUrl": "https://raw.githubusercontent.com/openfootball/worldcup/master/README.md",
-      "categories": ["matchs", "classements", "scores"]
-    },
-    {
-      "id": "api-football",
-      "name": "API-Football",
-      "enabled": false,
-      "type": "sports-data-legacy",
-      "homepage": "https://www.api-football.com",
-      "healthUrl": "https://www.api-football.com",
-      "backendOnly": true,
-      "note": "Source héritée désactivée. Ne pas utiliser dans Android et ne pas activer sans clé serveur valide.",
-      "categories": ["scores", "live", "matchs", "classements", "cartons", "suspensions"]
+      "categories": [
+        "matchs",
+        "classements",
+        "scores"
+      ]
     }
   ]
 }

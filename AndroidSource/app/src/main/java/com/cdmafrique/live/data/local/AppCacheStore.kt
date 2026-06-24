@@ -97,6 +97,15 @@ class AppCacheStore(context: Context) {
             .apply()
     }
 
+    fun hasLiveEventBeenNotified(eventKey: String): Boolean =
+        prefs.getStringSet("notifiedLiveEventKeys", emptySet()).orEmpty().contains(eventKey)
+
+    fun markLiveEventNotified(eventKey: String) {
+        val existing = prefs.getStringSet("notifiedLiveEventKeys", emptySet()).orEmpty()
+        val updated = (existing + eventKey).toList().takeLast(200).toSet()
+        prefs.edit().putStringSet("notifiedLiveEventKeys", updated).apply()
+    }
+
     fun isLiveTrackingActive(): Boolean {
         val active = prefs.getBoolean("liveTrackingActive", false)
         val heartbeatAt = prefs.getLong("liveTrackingHeartbeatAt", 0L)

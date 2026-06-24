@@ -182,6 +182,14 @@ enum class Reliability(val key: String, val display: String) {
     }
 }
 
+enum class DataSource(val display: String) {
+    RENDER("Render"),
+    BACKEND_CACHE("Cache backend"),
+    LOCAL_FALLBACK("Fallback local"),
+    EMPTY_SERVER("Serveur vide"),
+    ERROR("Erreur")
+}
+
 data class ContentResult(
     val title: String,
     val content: String,

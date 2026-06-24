@@ -90,6 +90,7 @@ import com.cdmafrique.live.data.model.Analysis
 import com.cdmafrique.live.data.model.AppDiagnostic
 import com.cdmafrique.live.data.model.Article
 import com.cdmafrique.live.data.model.ContentResult
+import com.cdmafrique.live.data.model.DataSource
 import com.cdmafrique.live.data.model.Match
 import com.cdmafrique.live.data.model.MatchEvent
 import com.cdmafrique.live.data.model.MatchLineups
@@ -98,6 +99,7 @@ import com.cdmafrique.live.data.model.MatchStatus
 import com.cdmafrique.live.data.model.Prediction
 import com.cdmafrique.live.data.model.StandingGroup
 import com.cdmafrique.live.ui.MainViewModel
+import com.cdmafrique.live.ui.ScreenDataState
 import com.cdmafrique.live.ui.theme.AfriqueGold
 import com.cdmafrique.live.ui.theme.AfriqueGreen
 import com.cdmafrique.live.ui.theme.AfriqueInk
@@ -274,12 +276,26 @@ private fun AppBody(
     val interviews by viewModel.interviewsContent.collectAsState()
     val training by viewModel.trainingContent.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val screenStates by viewModel.screenStates.collectAsState()
+    val currentScreenState = screenStates[screen.name]
 
     LaunchedEffect(Unit) {
         viewModel.loadDiagnostic()
         viewModel.loadArticles()
         viewModel.loadStandings()
+        viewModel.loadAllGlobalContent()
+    }
+
+    LaunchedEffect(screen) {
+        when (screen) {
+            AppScreen.News -> viewModel.loadArticles()
+            AppScreen.Videos -> viewModel.loadVideos()
+            AppScreen.Interviews -> viewModel.loadGlobalInterviews()
+            AppScreen.Injuries -> viewModel.loadGlobalInjuries()
+            AppScreen.Training -> viewModel.loadGlobalTraining()
+            AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+            else -> Unit
+        }
     }
 
     val openMatch: (Match) -> Unit = { match ->
@@ -295,12 +311,13 @@ private fun AppBody(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (error != null) {
+        val currentNotice = currentScreenState?.noticeMessage
+        if (currentNotice != null) {
             NoticeCard(
-                title = "Connexion",
-                message = error ?: "",
-                actionLabel = "Masquer",
-                onAction = viewModel::clearError
+                title = currentScreenState.source.display,
+                message = currentNotice,
+                actionLabel = "Reessayer",
+                onAction = retryForScreen(screen, viewModel)
             )
         }
 
@@ -356,37 +373,63 @@ private fun AppBody(
             AppScreen.Videos -> SimpleContentScreen(
                 title = "Videos",
                 items = media,
-                empty = "Aucune video disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune video disponible pour le moment."),
+                onRetry = viewModel::loadVideos
             )
             AppScreen.Interviews -> SimpleContentScreen(
                 title = "Interviews",
                 items = interviews,
-                empty = "Aucune interview disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune interview disponible pour le moment."),
+                onRetry = viewModel::loadGlobalInterviews
             )
             AppScreen.Injuries -> SimpleContentScreen(
                 title = "Blessures",
                 items = injuries,
-                empty = "Aucune blessure confirmee pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune blessure confirmee pour le moment."),
+                onRetry = viewModel::loadGlobalInjuries
             )
             AppScreen.Training -> SimpleContentScreen(
                 title = "Entrainements",
                 items = training,
-                empty = "Aucune information entrainement disponible pour le moment.",
-                onRetry = viewModel::refreshMatchDetail
+                empty = emptyMessageFor(currentScreenState, "Aucune information entrainement disponible pour le moment."),
+                onRetry = viewModel::loadGlobalTraining
             )
             AppScreen.Notifications -> NotificationSettingsScreen(
                 liveTrackingEnabled = liveTrackingEnabled,
                 onLiveTrackingChanged = viewModel::setLiveTrackingEnabled
             )
-            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, viewModel::loadDiagnostic)
+            AppScreen.Diagnostic -> DiagnosticScreenV5(diagnostic, screenStates, viewModel::loadDiagnostic)
             AppScreen.Widget -> WidgetInfoScreen()
             AppScreen.Settings -> SettingsScreenV5()
         }
         FooterCard()
     }
+}
+
+private fun retryForScreen(screen: AppScreen, viewModel: MainViewModel): () -> Unit = {
+    when (screen) {
+        AppScreen.News -> viewModel.loadArticles()
+        AppScreen.Videos -> viewModel.loadVideos()
+        AppScreen.Interviews -> viewModel.loadGlobalInterviews()
+        AppScreen.Injuries -> viewModel.loadGlobalInjuries()
+        AppScreen.Training -> viewModel.loadGlobalTraining()
+        AppScreen.Standings -> viewModel.loadStandings()
+        AppScreen.Diagnostic -> viewModel.loadDiagnostic()
+        else -> viewModel.refreshAll()
+    }
+}
+
+private fun emptyMessageFor(state: ScreenDataState?, defaultMessage: String): String =
+    when (state?.source) {
+        DataSource.EMPTY_SERVER -> "Aucune donnee serveur disponible pour le moment."
+        DataSource.ERROR -> state.errorMessage ?: "Donnees indisponibles pour cet ecran."
+        else -> defaultMessage
+    }
+
+private fun sourceSummary(state: ScreenDataState?): String {
+    if (state == null) return "Non charge"
+    val suffix = if (state.items == 1) "element" else "elements"
+    return "${state.source.display} - ${state.items} $suffix"
 }
 
 @Composable
@@ -685,7 +728,11 @@ private fun NotificationSettingsScreen(
 }
 
 @Composable
-private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
+private fun DiagnosticScreenV5(
+    diag: AppDiagnostic?,
+    screenStates: Map<String, ScreenDataState>,
+    onRetry: () -> Unit
+) {
     SectionTitle("Diagnostic")
     CardShell {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -707,6 +754,7 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
         EmptyState("Diagnostic en chargement.", "Reessayer", onRetry)
         return
     }
+    val screenFallbackUsed = screenStates.values.any { it.source == DataSource.LOCAL_FALLBACK }
     CardShell {
         StatusLine("Backend", diag.backendStatus)
         StatusLine("Version app", diag.appVersion)
@@ -718,9 +766,28 @@ private fun DiagnosticScreenV5(diag: AppDiagnostic?, onRetry: () -> Unit) {
         StatusLine("WorkManager", diag.workManagerStatus)
         StatusLine("Suivi live", if (diag.foregroundServiceActive) "Actif" else "Arrete")
         StatusLine("FCM token", if (diag.fcmTokenRegistered) "Enregistre" else "Non confirme")
-        StatusLine("Fallback local", if (diag.localFallbackUsed) "Utilise" else "Non utilise")
+        StatusLine("Fallback local", if (screenFallbackUsed || diag.localFallbackUsed) "Utilise" else "Non utilise")
         StatusLine("Derniere erreur", diag.lastError ?: "Aucune")
-        StatusLine("Cles API", "Protegees cote backend - aucune cle visible")
+        StatusLine("Secrets", "Caches cote backend")
+    }
+    CardShell {
+        Text("Sources ecrans", style = MaterialTheme.typography.titleMedium, color = AfriqueInk)
+        listOf(
+            "Home",
+            "Live",
+            "Today",
+            "Upcoming",
+            "Calendar",
+            "Africa",
+            "News",
+            "Videos",
+            "Interviews",
+            "Injuries",
+            "Training",
+            "Standings"
+        ).forEach { key ->
+            StatusLine(key, sourceSummary(screenStates[key]))
+        }
     }
     InfoCard(
         title = "Architecture",
@@ -1068,16 +1135,9 @@ private fun StatRow(label: String, home: String, away: String) {
 
 @Composable
 private fun StatusLine(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, color = AfriqueMuted, style = MaterialTheme.typography.labelLarge)
-        Text(
-            value,
-            color = AfriqueInk,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 8,
-            overflow = TextOverflow.Ellipsis
-        )
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = AfriqueMuted)
+        Text(value, color = AfriqueInk, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

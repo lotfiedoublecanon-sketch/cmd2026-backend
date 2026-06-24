@@ -4,6 +4,9 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import com.cdmafrique.live.data.local.AppCacheStore
+import com.cdmafrique.live.data.model.EventType
+import com.cdmafrique.live.data.model.Match
+import com.cdmafrique.live.data.model.MatchEvent
 import com.cdmafrique.live.data.repository.MatchRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +22,7 @@ class LiveTrackingForegroundService : Service() {
     private lateinit var cache: AppCacheStore
     private lateinit var repository: MatchRepository
     private var lastScoreSignature: String? = null
+    private var hadLiveMatches = false
 
     override fun onCreate() {
         super.onCreate()
@@ -61,6 +65,20 @@ class LiveTrackingForegroundService : Service() {
                 } else {
                     "${matches.size} match(s) live confirme(s)."
                 }
+                if (matches.isEmpty() && hadLiveMatches) {
+                    NotificationHelper.pushNotification(
+                        this@LiveTrackingForegroundService,
+                        "Live termine",
+                        "Aucun match live confirme actuellement.",
+                        NotificationHelper.LIVE_CHANNEL_ID
+                    )
+                    stopTracking()
+                    return@launch
+                }
+                if (matches.isNotEmpty()) {
+                    hadLiveMatches = true
+                    notifyNewGoalEvents(matches)
+                }
                 val signature = matches.joinToString("|") {
                     "${it.id}:${it.homeScore ?: "-"}-${it.awayScore ?: "-"}:${it.minute ?: "-"}"
                 }
@@ -79,6 +97,55 @@ class LiveTrackingForegroundService : Service() {
                 )
                 delay(if (matches.isEmpty()) 60_000L else 15_000L)
             }
+        }
+    }
+
+    private suspend fun notifyNewGoalEvents(matches: List<Match>) {
+        matches.forEach { match ->
+            val events = repository.getMatchEvents(match.id).getOrDefault(emptyList())
+            events.filter { it.type.isScoringEvent() }.forEach { event ->
+                val eventKey = liveEventKey(match, event)
+                if (!cache.hasLiveEventBeenNotified(eventKey)) {
+                    cache.markLiveEventNotified(eventKey)
+                    NotificationHelper.pushNotification(
+                        this,
+                        "But confirme",
+                        liveEventMessage(match, event),
+                        NotificationHelper.LIVE_CHANNEL_ID
+                    )
+                }
+            }
+        }
+    }
+
+    private fun EventType.isScoringEvent(): Boolean =
+        this == EventType.GOAL || this == EventType.OWN_GOAL || this == EventType.PENALTY
+
+    private fun liveEventKey(match: Match, event: MatchEvent): String =
+        listOf(
+            match.id,
+            event.type.key,
+            event.minute.toString(),
+            event.teamName.orEmpty(),
+            event.playerName.orEmpty(),
+            match.homeScore?.toString().orEmpty(),
+            match.awayScore?.toString().orEmpty()
+        ).joinToString("|")
+
+    private fun liveEventMessage(match: Match, event: MatchEvent): String {
+        val team = event.teamName?.takeIf { it.isNotBlank() } ?: "Equipe"
+        val minute = event.minute.takeIf { it > 0 }?.let { "$it'" }
+        val player = event.playerName?.takeIf { it.isNotBlank() }
+        val score = if (match.homeScore != null && match.awayScore != null) {
+            "${match.homeTeam.name} ${match.homeScore}-${match.awayScore} ${match.awayTeam.name}"
+        } else {
+            null
+        }
+        return when {
+            player != null && minute != null && score != null -> "But $team ! $player $minute - $score"
+            player != null && minute != null -> "But $team ! $player $minute"
+            minute != null -> "But $team - $minute"
+            else -> "But $team confirme"
         }
     }
 

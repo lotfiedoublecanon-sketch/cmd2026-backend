@@ -118,7 +118,7 @@ data class StandingEntryDto(
 data class ContentResultDto(
     val id: String? = null,
     val title: String = "",
-    @SerializedName(value = "content", alternate = ["summary"])
+    @SerializedName(value = "content", alternate = ["description"])
     val content: String? = null,
     val summary: String? = null,
     @SerializedName(value = "url", alternate = ["link", "sourceUrl", "source_url", "canonicalUrl"])

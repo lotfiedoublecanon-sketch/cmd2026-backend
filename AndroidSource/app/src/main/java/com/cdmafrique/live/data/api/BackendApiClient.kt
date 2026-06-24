@@ -218,6 +218,11 @@ class BackendApiClient {
 
             val root = JsonParser.parseString(body)
 
+            if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.get("success").asBoolean == false) {
+                lastError = temporaryError
+                return null
+            }
+
             // Extraire le payload : si le backend envoie { success, data }, prendre data
             val payload = if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.has("data")) {
                 root.asJsonObject.get("data")
@@ -362,8 +367,14 @@ class BackendApiClient {
                     lastError = temporaryError
                     null
                 } else {
-                    lastError = null
-                    JsonParser.parseString(body)
+                    val root = JsonParser.parseString(body)
+                    if (root.isJsonObject && root.asJsonObject.has("success") && root.asJsonObject.get("success").asBoolean == false) {
+                        lastError = temporaryError
+                        null
+                    } else {
+                        lastError = null
+                        root
+                    }
                 }
             }
         } catch (e: Exception) {

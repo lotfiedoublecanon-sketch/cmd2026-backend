@@ -9,6 +9,7 @@ import com.cdmafrique.live.data.model.AppDiagnostic
 import com.cdmafrique.live.data.model.Article
 import com.cdmafrique.live.data.model.CommentaryItem
 import com.cdmafrique.live.data.model.ContentResult
+import com.cdmafrique.live.data.model.DataSource
 import com.cdmafrique.live.data.model.Match
 import com.cdmafrique.live.data.model.MatchEvent
 import com.cdmafrique.live.data.model.MatchLineups
@@ -17,6 +18,13 @@ import com.cdmafrique.live.data.model.Prediction
 import com.cdmafrique.live.data.model.StandingGroup
 import com.cdmafrique.live.data.model.toDomain
 
+sealed class RepositoryLoadResult<out T> {
+    data class Success<T>(val data: T, val source: DataSource) : RepositoryLoadResult<T>()
+    data class Empty<T>(val source: DataSource = DataSource.EMPTY_SERVER) : RepositoryLoadResult<T>()
+    data class Error<T>(val message: String, val canUseLocalFallback: Boolean = true) : RepositoryLoadResult<T>()
+    data class LocalFallback<T>(val data: T, val reason: String) : RepositoryLoadResult<T>()
+}
+
 class MatchRepository(
     context: Context? = null,
     private val api: BackendApiClient = BackendApiClient()
@@ -24,44 +32,33 @@ class MatchRepository(
     private val temporaryError = "Serveur temporairement indisponible, reessayez."
     private val cache = context?.applicationContext?.let { AppCacheStore(it) }
 
-    suspend fun getLiveMatches(): Result<List<Match>> = try {
-        val matches = api.getLiveMatches().map { it.toDomain() }
-        if (matches.isNotEmpty()) cache?.saveMatches("live", matches)
-        Result.success(matches)
-    } catch (e: Exception) {
-        val cached = cache?.getFreshLiveMatches().orEmpty()
-        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(Exception(userFriendlyMessage(e)))
-    }
+    suspend fun getLiveMatches(): Result<List<Match>> = getLiveMatchesState().toListResult()
 
-    suspend fun getTodayMatches(): Result<List<Match>> = try {
-        val matches = api.getTodayMatches().map { it.toDomain() }
-        if (matches.isNotEmpty()) cache?.saveMatches("today", matches)
-        if (matches.isNotEmpty()) cache?.markFallbackUsed(false)
-        Result.success(matches.ifEmpty { cache?.getMatches("today").orEmpty() })
-    } catch (e: Exception) {
-        val cached = cache?.getMatches("today").orEmpty()
-        if (cached.isNotEmpty()) {
-            cache?.markFallbackUsed(false)
-            Result.success(cached)
-        } else {
-            Result.failure(Exception(userFriendlyMessage(e)))
-        }
-    }
+    suspend fun getLiveMatchesState(): RepositoryLoadResult<List<Match>> =
+        fetchMatchList(
+            bucket = "live",
+            readCache = { cache?.getFreshLiveMatches().orEmpty() },
+            allowLocalFallback = false,
+            remote = { api.getLiveMatches().map { it.toDomain() } }
+        )
 
-    suspend fun getUpcomingMatches(): Result<List<Match>> = try {
-        val matches = api.getUpcomingMatches().map { it.toDomain() }
-        if (matches.isNotEmpty()) cache?.saveMatches("upcoming", matches)
-        if (matches.isNotEmpty()) cache?.markFallbackUsed(false)
-        Result.success(matches.ifEmpty { cache?.getMatches("upcoming").orEmpty() })
-    } catch (e: Exception) {
-        val cached = cache?.getMatches("upcoming").orEmpty()
-        if (cached.isNotEmpty()) {
-            cache?.markFallbackUsed(false)
-            Result.success(cached)
-        } else {
-            Result.failure(Exception(userFriendlyMessage(e)))
-        }
-    }
+    suspend fun getTodayMatches(): Result<List<Match>> = getTodayMatchesState().toListResult()
+
+    suspend fun getTodayMatchesState(): RepositoryLoadResult<List<Match>> =
+        fetchMatchList(
+            bucket = "today",
+            readCache = { cache?.getMatches("today").orEmpty() },
+            remote = { api.getTodayMatches().map { it.toDomain() } }
+        )
+
+    suspend fun getUpcomingMatches(): Result<List<Match>> = getUpcomingMatchesState().toListResult()
+
+    suspend fun getUpcomingMatchesState(): RepositoryLoadResult<List<Match>> =
+        fetchMatchList(
+            bucket = "upcoming",
+            readCache = { cache?.getMatches("upcoming").orEmpty() },
+            remote = { api.getUpcomingMatches().map { it.toDomain() } }
+        )
 
     suspend fun getMatchById(matchId: String): Result<Match?> = try {
         Result.success(api.getMatchById(matchId)?.toDomain())
@@ -70,7 +67,12 @@ class MatchRepository(
     }
 
     suspend fun getMatchEvents(matchId: String): Result<List<MatchEvent>> = try {
-        Result.success(api.getMatchEvents(matchId).map { it.toDomain() })
+        val events = api.getMatchEvents(matchId).map { it.toDomain() }
+        if (events.isEmpty() && api.lastError != null) {
+            Result.failure(Exception(api.lastError ?: temporaryError))
+        } else {
+            Result.success(events)
+        }
     } catch (e: Exception) {
         Result.failure(Exception(userFriendlyMessage(e)))
     }
@@ -87,20 +89,14 @@ class MatchRepository(
         Result.failure(Exception(userFriendlyMessage(e)))
     }
 
-    suspend fun getStandings(): Result<List<StandingGroup>> = try {
-        val groups = api.getStandings()?.groups?.map { it.toDomain() }.orEmpty()
-        if (groups.isNotEmpty()) cache?.saveStandings(groups)
-        if (groups.isNotEmpty()) cache?.markFallbackUsed(false)
-        Result.success(groups.ifEmpty { cache?.getStandings().orEmpty() })
-    } catch (e: Exception) {
-        val cached = cache?.getStandings().orEmpty()
-        if (cached.isNotEmpty()) {
-            cache?.markFallbackUsed(false)
-            Result.success(cached)
-        } else {
-            Result.failure(Exception(userFriendlyMessage(e)))
-        }
-    }
+    suspend fun getStandings(): Result<List<StandingGroup>> = getStandingsState().toListResult()
+
+    suspend fun getStandingsState(): RepositoryLoadResult<List<StandingGroup>> =
+        fetchCachedList(
+            readCache = { cache?.getStandings().orEmpty() },
+            save = { cache?.saveStandings(it) },
+            remote = { api.getStandings()?.groups?.map { it.toDomain() }.orEmpty() }
+        )
 
     suspend fun getCommentary(matchId: String): Result<List<CommentaryItem>> = try {
         Result.success(api.getCommentary(matchId)?.items?.map { it.toDomain() }.orEmpty())
@@ -144,48 +140,94 @@ class MatchRepository(
         Result.failure(Exception(userFriendlyMessage(e)))
     }
 
-    suspend fun getArticles(): Result<List<Article>> = try {
-        val items = api.getArticles()?.items?.map { it.toDomain() }.orEmpty()
-        if (items.isNotEmpty()) cache?.saveArticles(items)
-        if (items.isNotEmpty()) cache?.markFallbackUsed(false)
-        Result.success(items.ifEmpty { cache?.getArticles().orEmpty() })
-    } catch (e: Exception) {
-        val cached = cache?.getArticles().orEmpty()
-        if (cached.isNotEmpty()) {
-            cache?.markFallbackUsed(false)
-            Result.success(cached)
-        } else {
-            Result.failure(Exception(userFriendlyMessage(e)))
-        }
-    }
+    suspend fun getArticles(): Result<List<Article>> = getArticlesState().toListResult()
 
-    suspend fun getVideos(): Result<List<ContentResult>> = getCachedContent("videos") { api.getVideos()?.items?.map { it.toDomain() }.orEmpty() }
+    suspend fun getArticlesState(): RepositoryLoadResult<List<Article>> =
+        fetchCachedList(
+            readCache = { cache?.getArticles().orEmpty() },
+            save = { cache?.saveArticles(it) },
+            remote = { api.getArticles()?.items?.map { it.toDomain() }.orEmpty() }
+        )
 
-    suspend fun getGlobalInterviews(): Result<List<ContentResult>> =
-        getCachedContent("interviews") { api.getGlobalInterviews()?.items?.map { it.toDomain() }.orEmpty() }
+    suspend fun getVideos(): Result<List<ContentResult>> = getVideosState().toListResult()
 
-    suspend fun getGlobalInjuries(): Result<List<ContentResult>> =
-        getCachedContent("injuries") { api.getGlobalInjuries()?.items?.map { it.toDomain() }.orEmpty() }
+    suspend fun getVideosState(): RepositoryLoadResult<List<ContentResult>> =
+        getCachedContentState("videos") { api.getVideos()?.items?.map { it.toDomain() }.orEmpty() }
 
-    suspend fun getGlobalTraining(): Result<List<ContentResult>> =
-        getCachedContent("training") { api.getGlobalTraining()?.items?.map { it.toDomain() }.orEmpty() }
+    suspend fun getGlobalInterviews(): Result<List<ContentResult>> = getGlobalInterviewsState().toListResult()
 
-    private suspend fun getCachedContent(
+    suspend fun getGlobalInterviewsState(): RepositoryLoadResult<List<ContentResult>> =
+        getCachedContentState("interviews") { api.getGlobalInterviews()?.items?.map { it.toDomain() }.orEmpty() }
+
+    suspend fun getGlobalInjuries(): Result<List<ContentResult>> = getGlobalInjuriesState().toListResult()
+
+    suspend fun getGlobalInjuriesState(): RepositoryLoadResult<List<ContentResult>> =
+        getCachedContentState("injuries") { api.getGlobalInjuries()?.items?.map { it.toDomain() }.orEmpty() }
+
+    suspend fun getGlobalTraining(): Result<List<ContentResult>> = getGlobalTrainingState().toListResult()
+
+    suspend fun getGlobalTrainingState(): RepositoryLoadResult<List<ContentResult>> =
+        getCachedContentState("training") { api.getGlobalTraining()?.items?.map { it.toDomain() }.orEmpty() }
+
+    private suspend fun getCachedContentState(
         bucket: String,
         remote: suspend () -> List<ContentResult>
-    ): Result<List<ContentResult>> = try {
+    ): RepositoryLoadResult<List<ContentResult>> =
+        fetchCachedList(
+            readCache = { cache?.getContent(bucket).orEmpty() },
+            save = { cache?.saveContent(bucket, it) },
+            remote = remote
+        )
+
+    private suspend fun fetchMatchList(
+        bucket: String,
+        readCache: () -> List<Match>,
+        allowLocalFallback: Boolean = true,
+        remote: suspend () -> List<Match>
+    ): RepositoryLoadResult<List<Match>> =
+        fetchCachedList(
+            readCache = readCache,
+            save = { cache?.saveMatches(bucket, it) },
+            allowLocalFallback = allowLocalFallback,
+            remote = remote
+        )
+
+    private suspend fun <T> fetchCachedList(
+        readCache: () -> List<T>,
+        save: (List<T>) -> Unit,
+        allowLocalFallback: Boolean = true,
+        remote: suspend () -> List<T>
+    ): RepositoryLoadResult<List<T>> = try {
         val items = remote()
-        if (items.isNotEmpty()) cache?.saveContent(bucket, items)
-        if (items.isNotEmpty()) cache?.markFallbackUsed(false)
-        Result.success(items.ifEmpty { cache?.getContent(bucket).orEmpty() })
-    } catch (e: Exception) {
-        val cached = cache?.getContent(bucket).orEmpty()
-        if (cached.isNotEmpty()) {
-            cache?.markFallbackUsed(false)
-            Result.success(cached)
-        } else {
-            Result.failure(Exception(userFriendlyMessage(e)))
+        val remoteError = api.lastError
+        when {
+            items.isNotEmpty() -> {
+                save(items)
+                RepositoryLoadResult.Success(items, DataSource.RENDER)
+            }
+            remoteError == null -> RepositoryLoadResult.Empty()
+            else -> cachedOrError(readCache(), remoteError, allowLocalFallback)
         }
+    } catch (e: Exception) {
+        cachedOrError(readCache(), userFriendlyMessage(e), allowLocalFallback)
+    }
+
+    private fun <T> cachedOrError(
+        cached: List<T>,
+        message: String,
+        allowLocalFallback: Boolean
+    ): RepositoryLoadResult<List<T>> =
+        if (cached.isNotEmpty()) {
+            RepositoryLoadResult.Success(cached, DataSource.BACKEND_CACHE)
+        } else {
+            RepositoryLoadResult.Error(message, canUseLocalFallback = allowLocalFallback)
+        }
+
+    private fun <T> RepositoryLoadResult<List<T>>.toListResult(): Result<List<T>> = when (this) {
+        is RepositoryLoadResult.Success -> Result.success(data)
+        is RepositoryLoadResult.Empty -> Result.success(emptyList())
+        is RepositoryLoadResult.Error -> Result.failure(Exception(message))
+        is RepositoryLoadResult.LocalFallback -> Result.success(data)
     }
 
     suspend fun getDiagnostic(): AppDiagnostic = try {
