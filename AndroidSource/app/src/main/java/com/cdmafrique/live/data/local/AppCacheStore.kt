@@ -106,6 +106,15 @@ class AppCacheStore(context: Context) {
         prefs.edit().putStringSet("notifiedLiveEventKeys", updated).apply()
     }
 
+    fun hasNotificationBeenDisplayed(dedupeKey: String): Boolean =
+        prefs.getStringSet("displayedNotificationKeys", emptySet()).orEmpty().contains(dedupeKey)
+
+    fun markNotificationDisplayed(dedupeKey: String) {
+        val existing = prefs.getStringSet("displayedNotificationKeys", emptySet()).orEmpty()
+        val updated = (existing + dedupeKey).toList().takeLast(300).toSet()
+        prefs.edit().putStringSet("displayedNotificationKeys", updated).apply()
+    }
+
     fun isLiveTrackingActive(): Boolean {
         val active = prefs.getBoolean("liveTrackingActive", false)
         val heartbeatAt = prefs.getLong("liveTrackingHeartbeatAt", 0L)

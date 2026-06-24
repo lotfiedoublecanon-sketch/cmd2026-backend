@@ -336,6 +336,9 @@ private fun AppBody(
                 live = liveMatches,
                 today = todayMatches,
                 upcoming = upcomingMatches,
+                liveState = screenStates["Live"],
+                todayState = screenStates["Today"],
+                upcomingState = screenStates["Upcoming"],
                 isLoading = isLoading,
                 onRefresh = viewModel::refreshAll,
                 onMatchClick = openMatch
@@ -484,6 +487,9 @@ private fun LiveScreenV5(
     live: List<Match>,
     today: List<Match>,
     upcoming: List<Match>,
+    liveState: ScreenDataState?,
+    todayState: ScreenDataState?,
+    upcomingState: ScreenDataState?,
     isLoading: Boolean,
     onRefresh: () -> Unit,
     onMatchClick: (Match) -> Unit
@@ -491,6 +497,7 @@ private fun LiveScreenV5(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Direct", "Aujourd'hui", "A venir")
     val lists = listOf(live, today, upcoming)
+    val states = listOf(liveState, todayState, upcomingState)
     val emptyMessages = listOf(
         "Aucun match en direct pour le moment.",
         "Aucun match aujourd'hui.",
@@ -506,6 +513,7 @@ private fun LiveScreenV5(
             )
         }
     }
+    InfoCard("Source ${tabs[selectedTab]}", sourceSummary(states[selectedTab]))
     MatchListBlock(
         matches = lists[selectedTab],
         empty = emptyMessages[selectedTab],

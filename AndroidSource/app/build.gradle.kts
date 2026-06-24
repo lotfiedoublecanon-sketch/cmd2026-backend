@@ -36,8 +36,8 @@ android {
         applicationId = "com.cdmafrique.live"
         minSdk = 26
         targetSdk = 35
-        versionCode = 514
-        versionName = "5.0.14"
+        versionCode = 515
+        versionName = "5.0.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

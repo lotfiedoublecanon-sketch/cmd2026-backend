@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.cdmafrique.live.background.SyncScheduler
+import com.cdmafrique.live.data.local.AppCacheStore
 import com.cdmafrique.live.data.repository.MatchRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -27,6 +28,15 @@ class CdmFirebaseMessagingService : FirebaseMessagingService() {
         SyncScheduler.enqueueOneTimeSync(applicationContext)
 
         if (!canPostNotifications()) return
+        val dedupeKey = message.messageId
+            ?: message.data["eventKey"]
+            ?: message.data["eventId"]
+            ?: message.data["dedupeKey"]
+        if (dedupeKey != null) {
+            val cache = AppCacheStore(applicationContext)
+            if (cache.hasNotificationBeenDisplayed(dedupeKey)) return
+            cache.markNotificationDisplayed(dedupeKey)
+        }
         val title = message.notification?.title
             ?: message.data["title"]
             ?: "CDM 2026 Live"

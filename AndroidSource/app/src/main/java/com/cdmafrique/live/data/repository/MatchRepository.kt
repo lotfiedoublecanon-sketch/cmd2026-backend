@@ -187,8 +187,9 @@ class MatchRepository(
     ): RepositoryLoadResult<List<Match>> =
         fetchCachedList(
             readCache = readCache,
-            save = { cache?.saveMatches(bucket, it) },
+            save = { cache?.saveMatches(bucket, it, replaceEmpty = bucket == "live") },
             allowLocalFallback = allowLocalFallback,
+            replaceEmpty = bucket == "live",
             remote = remote
         )
 
@@ -196,6 +197,7 @@ class MatchRepository(
         readCache: () -> List<T>,
         save: (List<T>) -> Unit,
         allowLocalFallback: Boolean = true,
+        replaceEmpty: Boolean = false,
         remote: suspend () -> List<T>
     ): RepositoryLoadResult<List<T>> = try {
         val items = remote()
@@ -205,7 +207,10 @@ class MatchRepository(
                 save(items)
                 RepositoryLoadResult.Success(items, DataSource.RENDER)
             }
-            remoteError == null -> RepositoryLoadResult.Empty()
+            remoteError == null -> {
+                if (replaceEmpty) save(emptyList())
+                RepositoryLoadResult.Empty()
+            }
             else -> cachedOrError(readCache(), remoteError, allowLocalFallback)
         }
     } catch (e: Exception) {

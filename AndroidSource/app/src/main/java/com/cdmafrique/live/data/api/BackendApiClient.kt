@@ -253,7 +253,8 @@ class BackendApiClient {
                     return try {
                         gson.fromJson<T>(payload, type)
                     } catch (e: JsonSyntaxException) {
-                        emptyList<Any>() as T
+                        lastError = temporaryError
+                        null
                     }
                 } else {
                     // T attend un objet mais on a un tableau
@@ -265,6 +266,7 @@ class BackendApiClient {
                     return try {
                         gson.fromJson<T>(payload.asJsonArray[0], object : TypeToken<T>() {}.type)
                     } catch (e: Exception) {
+                        lastError = temporaryError
                         null
                     }
                 }

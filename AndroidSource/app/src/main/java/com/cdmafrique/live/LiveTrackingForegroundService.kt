@@ -8,6 +8,7 @@ import com.cdmafrique.live.data.model.EventType
 import com.cdmafrique.live.data.model.Match
 import com.cdmafrique.live.data.model.MatchEvent
 import com.cdmafrique.live.data.repository.MatchRepository
+import com.cdmafrique.live.data.repository.RepositoryLoadResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +24,7 @@ class LiveTrackingForegroundService : Service() {
     private lateinit var repository: MatchRepository
     private var lastScoreSignature: String? = null
     private var hadLiveMatches = false
+    private var initialEventsPrimed = false
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +61,24 @@ class LiveTrackingForegroundService : Service() {
         pollingJob = serviceScope.launch {
             while (isActive) {
                 cache.touchLiveTrackingHeartbeat()
-                val matches = repository.getLiveMatches().getOrDefault(emptyList())
+                val liveResult = repository.getLiveMatchesState()
+                val matches = when (liveResult) {
+                    is RepositoryLoadResult.Success -> liveResult.data
+                    is RepositoryLoadResult.Empty -> emptyList()
+                    is RepositoryLoadResult.Error -> {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            NotificationHelper.liveNotification(
+                                this@LiveTrackingForegroundService,
+                                "Suivi live actif",
+                                "Connexion live temporairement indisponible."
+                            )
+                        )
+                        delay(60_000L)
+                        continue
+                    }
+                    is RepositoryLoadResult.LocalFallback -> emptyList()
+                }
                 val text = if (matches.isEmpty()) {
                     "Aucun match live confirme actuellement."
                 } else {
@@ -101,19 +120,33 @@ class LiveTrackingForegroundService : Service() {
     }
 
     private suspend fun notifyNewGoalEvents(matches: List<Match>) {
-        matches.forEach { match ->
-            val events = repository.getMatchEvents(match.id).getOrDefault(emptyList())
-            events.filter { it.type.isScoringEvent() }.forEach { event ->
-                val eventKey = liveEventKey(match, event)
-                if (!cache.hasLiveEventBeenNotified(eventKey)) {
-                    cache.markLiveEventNotified(eventKey)
-                    NotificationHelper.pushNotification(
-                        this,
-                        "But confirme",
-                        liveEventMessage(match, event),
-                        NotificationHelper.LIVE_CHANNEL_ID
-                    )
-                }
+        val scoringEvents = mutableListOf<Pair<Match, MatchEvent>>()
+        for (match in matches) {
+            val eventsResult = repository.getMatchEvents(match.id)
+            if (eventsResult.isFailure) return
+            scoringEvents += eventsResult.getOrDefault(emptyList())
+                .filter { it.type.isScoringEvent() }
+                .map { event -> match to event }
+        }
+
+        if (!initialEventsPrimed) {
+            scoringEvents.forEach { (match, event) ->
+                cache.markLiveEventNotified(liveEventKey(match, event))
+            }
+            initialEventsPrimed = true
+            return
+        }
+
+        scoringEvents.forEach { (match, event) ->
+            val eventKey = liveEventKey(match, event)
+            if (!cache.hasLiveEventBeenNotified(eventKey)) {
+                cache.markLiveEventNotified(eventKey)
+                NotificationHelper.pushNotification(
+                    this,
+                    "But confirme",
+                    liveEventMessage(match, event),
+                    NotificationHelper.LIVE_CHANNEL_ID
+                )
             }
         }
     }
@@ -124,12 +157,11 @@ class LiveTrackingForegroundService : Service() {
     private fun liveEventKey(match: Match, event: MatchEvent): String =
         listOf(
             match.id,
+            event.id,
             event.type.key,
             event.minute.toString(),
             event.teamName.orEmpty(),
-            event.playerName.orEmpty(),
-            match.homeScore?.toString().orEmpty(),
-            match.awayScore?.toString().orEmpty()
+            event.playerName.orEmpty()
         ).joinToString("|")
 
     private fun liveEventMessage(match: Match, event: MatchEvent): String {
