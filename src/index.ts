@@ -6,10 +6,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
 
 import aiRoutes from './routes/ai';
 import matchesRoutes from './routes/matches';
 import notificationsRoutes from './routes/notifications';
+import widgetRoutes from './routes/widget';
 import { sourceFetcherService } from './services/source-fetcher-service';
 import { serverCache } from './services/server-cache';
 import { BACKEND_VERSION } from './config/version';
@@ -24,6 +26,9 @@ app.use(helmet());
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json());
+
+const widgetDirectory = path.join(__dirname, '..', 'web-widget');
+app.use('/widget', express.static(widgetDirectory, { index: 'index.html' }));
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({
@@ -66,6 +71,8 @@ app.get('/diagnostic', (req: Request, res: Response) => {
       ai: '/ai/*',
       matches: '/matches/*',
       notifications: '/notifications/*',
+      widget: '/widget',
+      widgetApi: '/api/widget/*',
     },
   });
 });
@@ -115,6 +122,7 @@ app.get('/training', async (req: Request, res: Response) => {
 app.use('/ai', aiRoutes);
 app.use('/matches', matchesRoutes);
 app.use('/notifications', notificationsRoutes);
+app.use('/api/widget', widgetRoutes);
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err?.message || 'Internal server error');

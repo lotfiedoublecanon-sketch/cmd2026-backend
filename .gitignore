@@ -4,6 +4,12 @@ dist/
 .env.*
 !.env.example
 *.log
+*.pid
+*.jks
+*.keystore
+*.p12
+*.pem
+service-account*.json
 coverage/
 .DS_Store
 Thumbs.db

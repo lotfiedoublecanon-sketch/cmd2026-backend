@@ -177,6 +177,64 @@ export interface ApiResponse<T> {
   };
 }
 
+// ---- Web live widget ----
+
+export type WidgetMatchStatus =
+  | 'SCHEDULED'
+  | 'LIVE'
+  | 'HALF_TIME'
+  | 'FINISHED'
+  | 'POSTPONED'
+  | 'CANCELLED'
+  | 'UNKNOWN'
+  | 'AWAITING_LIVE_DATA';
+
+export type WidgetLiveDataStatus =
+  | 'live'
+  | 'waiting'
+  | 'scheduled'
+  | 'final'
+  | 'available'
+  | 'unavailable';
+
+export interface WidgetMatch {
+  id: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeTeamCode: string | null;
+  awayTeamCode: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: WidgetMatchStatus;
+  minute: number | null;
+  kickoff: string | null;
+  group: string | null;
+  sourceUsed: string;
+  lastUpdatedAt: string;
+  liveDataStatus: WidgetLiveDataStatus;
+}
+
+export interface WidgetStatusItem {
+  status: 'OK' | 'DEGRADED';
+  sourceUsed: string;
+  lastUpdatedAt: string;
+  liveDataStatus: WidgetLiveDataStatus;
+  counts: {
+    live: number;
+    today: number;
+    upcoming: number;
+  };
+}
+
+export interface WidgetResponse<T> {
+  success: boolean;
+  items: T[];
+  sourceUsed: string;
+  lastUpdatedAt: string;
+  liveDataStatus: WidgetLiveDataStatus;
+  error?: string;
+}
+
 // ---- Gemini / Agents ----
 
 export type GeminiAgentType = 'commentator' | 'analyst' | 'predictor' | 'journalist';
