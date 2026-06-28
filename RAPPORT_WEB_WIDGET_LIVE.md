@@ -4,11 +4,13 @@ Date de validation locale : 2026-06-29
 
 ## Livraison
 
-- URL finale : `https://cmd2026-backend-1.onrender.com/widget/`
+- URL finale active : `https://lotfiedoublecanon-sketch.github.io/cmd2026-backend/web-widget/`
+- URL Render preparee : `https://cmd2026-backend-1.onrender.com/widget/`
 - Branche : `feature/web-live-widget-score`
 - Backend modifie : oui, ajout isole des routes et du service widget
 - Android V5.0.15 modifie : non
-- Render redeploye : en attente du merge vers `main`
+- Render redeploye : non, l'auto-deploiement n'a pas demarre apres le push `main`
+- Hebergement actif : GitHub Pages, avec appels au backend Render public
 
 ## Fichiers
 
@@ -33,7 +35,7 @@ Date de validation locale : 2026-06-29
 - `GET /api/widget/status`
 - `GET /api/widget/events/:matchId`
 
-Le frontend utilise uniquement ces URL relatives. Il ne contient aucune cle et ne contacte pas directement un fournisseur externe.
+Sur Render, le frontend utilise ces URL relatives. Sur GitHub Pages, il appelle les routes `/matches/*` du backend Render public. Il ne contient aucune cle et ne contacte jamais directement un fournisseur de scores.
 
 ## Sources et veracite
 
@@ -63,6 +65,7 @@ Les cles restent exclusivement dans Render Environment Variables. `.env` est ign
 
 - Desktop 1280 x 720 : OK
 - Mobile 360 x 720 : OK, aucun debordement horizontal
+- Petit mobile 320 x 640 : OK, aucun debordement horizontal
 - Onglets Live, Aujourd'hui, A venir : OK
 - Reduire puis agrandir : OK
 - Bouton Actualiser : OK
@@ -83,4 +86,4 @@ Les cles restent exclusivement dans Render Environment Variables. `.env` est ign
 
 ## Limites
 
-Le widget ne peut afficher un score live que lorsqu'une source backend fiable le confirme. Un live absent des fournisseurs reste volontairement vide. Les noms `TBD` fournis par le calendrier officiel restent affiches tant que les equipes ne sont pas encore determinees.
+Le widget ne peut afficher un score live que lorsqu'une source backend fiable le confirme. Un live absent des fournisseurs reste volontairement vide. Les noms `TBD` fournis par le calendrier officiel restent affiches tant que les equipes ne sont pas encore determinees. L'URL Render `/widget/` restera en 404 jusqu'au prochain deploiement manuel du commit `main`; GitHub Pages fournit l'URL active en attendant.

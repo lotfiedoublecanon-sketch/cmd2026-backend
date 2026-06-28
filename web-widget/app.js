@@ -1,19 +1,26 @@
 (() => {
   'use strict';
 
+  const RENDER_ORIGIN = 'https://cmd2026-backend-1.onrender.com';
+  const useSameOriginWidgetApi = location.hostname.endsWith('.onrender.com')
+    || location.port === '3107';
+  const apiEndpoint = (widgetPath, publicPath) => useSameOriginWidgetApi
+    ? widgetPath
+    : `${RENDER_ORIGIN}${publicPath}`;
+
   const VIEWS = {
     live: {
-      endpoint: '/api/widget/live',
+      endpoint: apiEndpoint('/api/widget/live', '/matches/live'),
       interval: 15_000,
       intervalLabel: '15 s',
     },
     today: {
-      endpoint: '/api/widget/today',
+      endpoint: apiEndpoint('/api/widget/today', '/matches/today'),
       interval: 60_000,
       intervalLabel: '60 s',
     },
     upcoming: {
-      endpoint: '/api/widget/upcoming?days=60',
+      endpoint: apiEndpoint('/api/widget/upcoming?days=60', '/matches/upcoming?days=60'),
       interval: 300_000,
       intervalLabel: '5 min',
     },
@@ -182,7 +189,21 @@
   }
 
   function readMatchStatus(match) {
-    return firstString(match?.status, match?.state, match?.liveStatus);
+    const status = firstString(match?.status, match?.state, match?.liveStatus);
+    const kickoff = firstString(
+      match?.kickoff,
+      match?.startDateTimeUtc,
+      match?.startTime,
+      match?.date,
+    );
+    const scoreMissing = readScore(match?.homeScore) === '—'
+      && readScore(match?.awayScore) === '—';
+    const kickoffTime = kickoff ? new Date(kickoff).getTime() : Number.NaN;
+    const isUnconfirmed = ['scheduled', 'SCHEDULED', 'unknown', 'UNKNOWN'].includes(status);
+    if (isUnconfirmed && scoreMissing && Number.isFinite(kickoffTime) && kickoffTime <= Date.now()) {
+      return 'AWAITING_LIVE_DATA';
+    }
+    return status;
   }
 
   function statusLabel(status) {

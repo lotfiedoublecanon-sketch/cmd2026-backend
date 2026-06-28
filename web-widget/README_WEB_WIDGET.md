@@ -2,6 +2,8 @@
 
 Widget autonome, compact et responsive, sans dépendance externe.
 
+En production, le widget peut être servi par Render sous `/widget/` ou par GitHub Pages. Sur GitHub Pages, il appelle directement les routes publiques du backend Render, sans aucune clé côté navigateur.
+
 ## Intégration
 
 Servir le dossier `web-widget` depuis la même origine que l'API, puis intégrer `index.html` directement ou dans une iframe :
