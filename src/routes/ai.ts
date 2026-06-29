@@ -42,7 +42,7 @@ router.post('/agents/:agent', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent(agentName, req.body || {});
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -51,7 +51,7 @@ router.post('/orchestrate', async (req: Request, res: Response) => {
     const results = await agentOrchestrator.runAll(req.body || {});
     res.json({ success: true, data: results });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -84,7 +84,7 @@ router.post('/chat', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -105,7 +105,7 @@ router.post('/commentary', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -120,7 +120,7 @@ router.post('/analysis', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('Analyste', { matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -135,7 +135,7 @@ router.post('/prediction', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('Pronostiqueur', { matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -150,7 +150,7 @@ router.post('/article', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('Journaliste', { topic, matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -165,7 +165,7 @@ router.post('/summary', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -179,7 +179,7 @@ router.post('/news', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -194,7 +194,7 @@ router.post('/injury-report', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('InjuryAgent', { teamName, matchContext });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -207,7 +207,7 @@ router.post('/injuries', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -222,7 +222,7 @@ router.post('/interview', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('InterviewAgent', { playerName, occasion, matchContext, matchId });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -237,7 +237,7 @@ router.post('/interviews', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -252,7 +252,7 @@ router.post('/training-report', async (req: Request, res: Response) => {
     const result = await agentOrchestrator.runAgent('TrainingAgent', { teamName, matchContext });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 
@@ -265,7 +265,7 @@ router.post('/training', async (req: Request, res: Response) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Service temporarily unavailable' });
   }
 });
 

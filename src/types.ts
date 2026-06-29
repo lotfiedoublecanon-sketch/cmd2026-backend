@@ -48,6 +48,7 @@ export type SourceName =
   | 'fapi'
   | 'sportdb'
   | 'sportmonks'
+  | 'espn-public'
   | 'merged'
   | 'cache'
   | 'backend'

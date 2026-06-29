@@ -126,9 +126,9 @@ app.get('/training', async (req: Request, res: Response) => {
 });
 
 app.use('/ai', createRateLimiter({ windowMs: 60_000, maxRequests: 20 }), aiRoutes);
-app.use('/matches', matchesRoutes);
+app.use('/matches', createRateLimiter({ windowMs: 60_000, maxRequests: 120 }), matchesRoutes);
 app.use('/notifications', createRateLimiter({ windowMs: 60_000, maxRequests: 30 }), notificationsRoutes);
-app.use('/api/widget', widgetRoutes);
+app.use('/api/widget', createRateLimiter({ windowMs: 60_000, maxRequests: 120 }), widgetRoutes);
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   const status = Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599

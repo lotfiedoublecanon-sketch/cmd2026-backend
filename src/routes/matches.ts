@@ -66,7 +66,7 @@ router.get('/live', async (req: Request, res: Response) => {
       data: [],
       source: 'backend',
       sourceUsed: 'backend',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -90,7 +90,7 @@ router.get('/today', async (req: Request, res: Response) => {
       data: [],
       source: 'backend',
       sourceUsed: 'backend',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -115,7 +115,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
       data: [],
       source: 'backend',
       sourceUsed: 'backend',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -140,7 +140,7 @@ router.get('/standings', async (req: Request, res: Response) => {
       data: { groups: [] },
       source: 'backend',
       sourceUsed: 'backend',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -166,7 +166,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: false,
       data: null,
       source: 'fapi',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -188,7 +188,7 @@ router.get('/:id/events', async (req: Request, res: Response) => {
       success: false,
       data: [],
       source: 'fapi',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -210,7 +210,7 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
       success: false,
       data: null,
       source: 'fapi',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -232,7 +232,7 @@ router.get('/:id/lineups', async (req: Request, res: Response) => {
       success: false,
       data: null,
       source: 'fapi',
-      error: (error as Error).message,
+      error: 'Service temporarily unavailable',
     });
   }
 });
@@ -253,7 +253,7 @@ router.get('/:id/commentary', async (req: Request, res: Response) => {
       sources: result.sources,
     });
   } catch (error) {
-    res.status(500).json({ matchId: req.params.id, items: [], error: (error as Error).message });
+    res.status(500).json({ matchId: req.params.id, items: [], error: 'Service temporarily unavailable' });
   }
 });
 
@@ -271,7 +271,7 @@ router.get('/:id/analysis', async (req: Request, res: Response) => {
       sources: result.sources,
     });
   } catch (error) {
-    res.status(500).json({ matchId: req.params.id, content: '', reliability: 'unconfirmed', error: (error as Error).message });
+    res.status(500).json({ matchId: req.params.id, content: '', reliability: 'unconfirmed', error: 'Service temporarily unavailable' });
   }
 });
 
@@ -290,7 +290,7 @@ router.get('/:id/prediction', async (req: Request, res: Response) => {
       sources: result.sources,
     });
   } catch (error) {
-    res.status(500).json({ matchId: req.params.id, prediction: '', reliability: 'unconfirmed', error: (error as Error).message });
+    res.status(500).json({ matchId: req.params.id, prediction: '', reliability: 'unconfirmed', error: 'Service temporarily unavailable' });
   }
 });
 

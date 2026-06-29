@@ -4,6 +4,7 @@
 import { fapiClient } from '../clients/fapi-client';
 import { sportDbClient } from '../clients/sportdb-client';
 import { sportMonksClient } from '../clients/sportmonks-client';
+import { espnLiveClient } from '../clients/espn-live-client';
 import { worldCup2026TourClient } from '../clients/worldcup2026-tour-client';
 import { whenIsKickoffClient } from '../clients/wheniskickoff-client';
 import { openFootballClient } from '../clients/openfootball-client';
@@ -159,6 +160,15 @@ class MergeService {
       console.warn('[Merge] Sportmonks live failed:', this.safeError(e));
     }
 
+    try {
+      hasConfiguredSource = true;
+      const result = await espnLiveClient.getLiveMatches();
+      if (result.matches.length > 0) return this.response(result.matches, 'espn-public');
+      if (result.requestSucceeded && !confirmedEmptySource) confirmedEmptySource = 'espn-public';
+    } catch (e) {
+      console.warn('[Merge] ESPN public live failed:', this.safeError(e));
+    }
+
     if (this.fapiAvailable()) try {
       hasConfiguredSource = true;
       const result = await fapiClient.getLiveMatches();
@@ -197,9 +207,10 @@ class MergeService {
     }
 
     try {
-      const tourToday = (await worldCup2026TourClient.getToday())
+      const tourMatches = (await worldCup2026TourClient.getToday())
         .map(mapWorldCupTourMatch)
         .filter(Boolean) as NormalizedMatch[];
+      const tourToday = filterTourToday(tourMatches);
       if (tourToday.length > 0) return this.response(tourToday, 'worldcup2026-tour');
     } catch (e) {
       console.warn('[Merge] World Cup Tour today failed:', this.safeError(e));

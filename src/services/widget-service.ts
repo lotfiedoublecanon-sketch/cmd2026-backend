@@ -47,22 +47,15 @@ export class WidgetService {
       this.getToday(),
       this.getUpcoming(60),
     ]);
-    const usableSource = [live, today, upcoming].find(
-      (response) => response.sourceUsed !== 'backend' || response.items.length > 0
-    );
-    const status = usableSource ? 'OK' : 'DEGRADED';
+    const status = live.success && today.success && upcoming.success ? 'OK' : 'DEGRADED';
     const lastUpdatedAt = [live.lastUpdatedAt, today.lastUpdatedAt, upcoming.lastUpdatedAt]
       .sort()
       .at(-1) || new Date().toISOString();
     const item: WidgetStatusItem = {
       status,
-      sourceUsed: usableSource?.sourceUsed || 'backend',
+      sourceUsed: live.sourceUsed,
       lastUpdatedAt,
-      liveDataStatus: live.liveDataStatus === 'live'
-        ? 'live'
-        : today.liveDataStatus === 'waiting'
-          ? 'waiting'
-          : usableSource?.liveDataStatus || 'unavailable',
+      liveDataStatus: live.liveDataStatus,
       counts: {
         live: live.items.length,
         today: today.items.length,
@@ -100,6 +93,7 @@ export class WidgetService {
     options: MatchNormalizationOptions = {}
   ): WidgetMatch {
     const waiting = this.isAwaitingLiveData(match, options);
+    const unconfirmed = UNCONFIRMED_STATUSES.has(match.status);
     const status = waiting ? 'AWAITING_LIVE_DATA' : this.widgetStatus(match.status);
 
     return {
@@ -108,10 +102,10 @@ export class WidgetService {
       awayTeamName: match.awayTeam.name,
       homeTeamCode: this.teamCode(match.homeTeam.threeCharCode, match.homeTeam.shortName),
       awayTeamCode: this.teamCode(match.awayTeam.threeCharCode, match.awayTeam.shortName),
-      homeScore: waiting ? null : this.nullableNumber(match.homeScore),
-      awayScore: waiting ? null : this.nullableNumber(match.awayScore),
+      homeScore: waiting || unconfirmed ? null : this.nullableNumber(match.homeScore),
+      awayScore: waiting || unconfirmed ? null : this.nullableNumber(match.awayScore),
       status,
-      minute: waiting ? null : this.nullableNumber(match.minute),
+      minute: waiting || unconfirmed ? null : this.nullableNumber(match.minute),
       kickoff: this.validDate(match.startDateTimeUtc),
       group: match.group ? String(match.group) : null,
       sourceUsed: match.sourceUsed || match.source || sourceUsed,
