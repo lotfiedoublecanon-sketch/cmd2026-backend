@@ -47,6 +47,7 @@ export type TimelineEventType =
 export type SourceName =
   | 'fapi'
   | 'sportdb'
+  | 'sportmonks'
   | 'merged'
   | 'cache'
   | 'backend'

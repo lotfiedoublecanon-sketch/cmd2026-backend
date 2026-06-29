@@ -3,6 +3,7 @@
 // ============================================
 import { fapiClient } from '../clients/fapi-client';
 import { sportDbClient } from '../clients/sportdb-client';
+import { sportMonksClient } from '../clients/sportmonks-client';
 import { worldCup2026TourClient } from '../clients/worldcup2026-tour-client';
 import { whenIsKickoffClient } from '../clients/wheniskickoff-client';
 import { openFootballClient } from '../clients/openfootball-client';
@@ -149,11 +150,20 @@ class MergeService {
     let confirmedEmptySource: SourceName | null = null;
     let hasConfiguredSource = false;
 
+    if (sportMonksClient.isConfigured()) try {
+      hasConfiguredSource = true;
+      const result = await sportMonksClient.getLiveMatches();
+      if (result.matches.length > 0) return this.response(result.matches, 'sportmonks');
+      if (result.requestSucceeded) confirmedEmptySource = 'sportmonks';
+    } catch (e) {
+      console.warn('[Merge] Sportmonks live failed:', this.safeError(e));
+    }
+
     if (this.fapiAvailable()) try {
       hasConfiguredSource = true;
       const result = await fapiClient.getLiveMatches();
       if (result.matches.length > 0) return this.response(result.matches, 'fapi');
-      if (result.requestSucceeded) confirmedEmptySource = 'fapi';
+      if (result.requestSucceeded && !confirmedEmptySource) confirmedEmptySource = 'fapi';
     } catch (e) {
       console.warn('[Merge] FAPI live failed:', this.safeError(e));
     }

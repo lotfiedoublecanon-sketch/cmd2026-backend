@@ -55,6 +55,8 @@ app.get('/diagnostic', (req: Request, res: Response) => {
     checks: {
       fapiConfigured: hasConfigValue('FAPI_API_KEY', 'THESTATSAPI_KEY'),
       sportDbConfigured: hasConfigValue('SPORTDB_API_KEY'),
+      sportMonksConfigured: process.env.LIVE_SCORE_PROVIDER?.trim().toLowerCase() === 'sportmonks'
+        && hasConfigValue('LIVE_SCORE_API_KEY'),
       geminiConfigured: hasConfigValue('GEMINI_API_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY'),
       worldCupTourConfigured: true,
       whenIsKickoffConfigured: true,
