@@ -146,21 +146,36 @@ class MergeService {
   }
 
   private async fetchLiveMatches(): Promise<ApiResponse<NormalizedMatch[]>> {
+    let confirmedEmptySource: SourceName | null = null;
+    let hasConfiguredSource = false;
+
     if (this.fapiAvailable()) try {
-      const fapiMatches = await fapiClient.getLiveMatches();
-      if (fapiMatches.length > 0) return this.response(fapiMatches, 'fapi');
+      hasConfiguredSource = true;
+      const result = await fapiClient.getLiveMatches();
+      if (result.matches.length > 0) return this.response(result.matches, 'fapi');
+      if (result.requestSucceeded) confirmedEmptySource = 'fapi';
     } catch (e) {
       console.warn('[Merge] FAPI live failed:', this.safeError(e));
     }
 
     if (this.sportDbAvailable()) try {
-      const sportDbMatches = await sportDbClient.getLiveMatches();
-      if (sportDbMatches.length > 0) return this.response(sportDbMatches, 'sportdb');
+      hasConfiguredSource = true;
+      const result = await sportDbClient.getLiveMatches();
+      if (result.matches.length > 0) return this.response(result.matches, 'sportdb');
+      if (result.requestSucceeded && !confirmedEmptySource) confirmedEmptySource = 'sportdb';
     } catch (e) {
       console.warn('[Merge] SportDB live failed:', this.safeError(e));
     }
 
-    return this.response([], 'backend');
+    if (confirmedEmptySource) return this.response([], confirmedEmptySource);
+
+    return {
+      success: false,
+      data: [],
+      source: 'backend',
+      sourceUsed: 'backend',
+      error: hasConfiguredSource ? 'No live source request succeeded' : 'No live source configured',
+    };
   }
 
   private async fetchTodayMatches(): Promise<ApiResponse<NormalizedMatch[]>> {
@@ -300,7 +315,7 @@ class MergeService {
       ...cached.value,
       cache: cached.info,
       cachedAt: cached.info.updatedAt,
-      updatedAt: new Date().toISOString(),
+      updatedAt: cached.info.updatedAt || cached.value.updatedAt || new Date().toISOString(),
     };
   }
 

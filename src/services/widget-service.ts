@@ -108,8 +108,8 @@ export class WidgetService {
       awayTeamName: match.awayTeam.name,
       homeTeamCode: this.teamCode(match.homeTeam.threeCharCode, match.homeTeam.shortName),
       awayTeamCode: this.teamCode(match.awayTeam.threeCharCode, match.awayTeam.shortName),
-      homeScore: this.nullableNumber(match.homeScore),
-      awayScore: this.nullableNumber(match.awayScore),
+      homeScore: waiting ? null : this.nullableNumber(match.homeScore),
+      awayScore: waiting ? null : this.nullableNumber(match.awayScore),
       status,
       minute: waiting ? null : this.nullableNumber(match.minute),
       kickoff: this.validDate(match.startDateTimeUtc),
@@ -146,7 +146,6 @@ export class WidgetService {
   ): boolean {
     if (!options.markPassedKickoffAsWaiting) return false;
     if (!UNCONFIRMED_STATUSES.has(match.status)) return false;
-    if (match.homeScore !== null || match.awayScore !== null) return false;
 
     const kickoff = new Date(match.startDateTimeUtc);
     if (!Number.isFinite(kickoff.getTime())) return false;

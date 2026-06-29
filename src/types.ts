@@ -92,6 +92,11 @@ export interface NormalizedMatch {
   referee?: string;
 }
 
+export interface LiveMatchesResult {
+  matches: NormalizedMatch[];
+  requestSucceeded: boolean;
+}
+
 // ---- Match Event ----
 
 export interface MatchEvent {

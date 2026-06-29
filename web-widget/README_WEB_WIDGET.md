@@ -2,7 +2,7 @@
 
 Widget autonome, compact et responsive, sans dépendance externe.
 
-En production, le widget peut être servi par Render sous `/widget/` ou par GitHub Pages. Sur GitHub Pages, il appelle directement les routes publiques du backend Render, sans aucune clé côté navigateur.
+En production, le widget peut être servi par Render sous `/widget/` ou par GitHub Pages. Sur Render, il utilise les URL relatives `/api/widget/*`. Sur GitHub Pages, il utilise les mêmes routes auditées via `https://cmd2026-backend-1.onrender.com/api/widget/*`, sans aucune clé côté navigateur.
 
 ## Intégration
 
@@ -22,7 +22,7 @@ L'iframe peut recevoir `width="100%"`. Le widget accepte une largeur minimale de
 
 ## API attendue
 
-Le widget effectue uniquement des requêtes `GET` relatives vers :
+Le widget effectue uniquement des requêtes `GET` vers le flux audité `/api/widget/*` :
 
 - `/api/widget/live` toutes les 15 secondes ;
 - `/api/widget/today` toutes les 60 secondes ;
@@ -57,7 +57,7 @@ Format d'enveloppe pris en charge :
 }
 ```
 
-Les enveloppes existantes `data` et `data.matches` restent également acceptées. Les scores `null` affichent « Score non disponible » et ne sont jamais remplacés par zéro. Le statut `AWAITING_LIVE_DATA` ou `liveDataStatus: "waiting"` affiche explicitement une attente de données live. Une source ou une date absente reste non renseignée.
+Les enveloppes existantes `data` et `data.matches` restent également acceptées. Les scores `null` affichent « Score non disponible » et ne sont jamais remplacés par zéro. Le statut `AWAITING_LIVE_DATA` ou `liveDataStatus: "waiting"` renvoyé par le backend affiche explicitement une attente de données live. Le widget ne déduit aucun statut depuis l'heure du coup d'envoi ou le score : le backend widget est la seule source de vérité. Une source ou une date absente reste non renseignée.
 
 ## États et accessibilité
 

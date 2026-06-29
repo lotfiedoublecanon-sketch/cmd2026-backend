@@ -1,8 +1,9 @@
 // ============================================
 // API Routes - Notifications (FCM)
 // ============================================
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { notificationService } from '../services/notification-service';
+import { requireAdminToken } from '../middleware/security';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  * Register a device token for push notifications
  * Body: { token: string }
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token } = req.body;
     if (!token) {
@@ -21,7 +22,7 @@ router.post('/register', async (req: Request, res: Response) => {
     notificationService.registerToken(token);
     res.json({ success: true, message: 'Token registered' });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    next(error);
   }
 });
 
@@ -30,7 +31,7 @@ router.post('/register', async (req: Request, res: Response) => {
  * Unregister a device token
  * Body: { token: string }
  */
-router.post('/unregister', async (req: Request, res: Response) => {
+router.post('/unregister', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token } = req.body;
     if (!token) {
@@ -40,20 +41,20 @@ router.post('/unregister', async (req: Request, res: Response) => {
     notificationService.unregisterToken(token);
     res.json({ success: true, message: 'Token unregistered' });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    next(error);
   }
 });
 
 /**
  * GET /notifications/tokens
- * Get all registered tokens (admin only - should be protected in production)
+ * Get the registered token count (admin only)
  */
-router.get('/tokens', async (req: Request, res: Response) => {
+router.get('/tokens', requireAdminToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tokens = notificationService.getRegisteredTokens();
     res.json({ success: true, count: tokens.length });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    next(error);
   }
 });
 
@@ -62,7 +63,7 @@ router.get('/tokens', async (req: Request, res: Response) => {
  * Send a test notification to all registered devices
  * Body: { title: string, body: string }
  */
-router.post('/test', async (req: Request, res: Response) => {
+router.post('/test', requireAdminToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { title, body } = req.body;
     await notificationService.sendToAll({
@@ -72,7 +73,7 @@ router.post('/test', async (req: Request, res: Response) => {
     });
     res.json({ success: true, message: 'Test notification sent' });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    next(error);
   }
 });
 

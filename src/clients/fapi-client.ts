@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import {
   NormalizedMatch, MatchEvent, TimelineEventType,
   MatchStats, StatCategory, MatchLineups, LineupPlayer,
-  TeamInfo, MatchStatus, MatchPeriod, StandingEntry
+  TeamInfo, MatchStatus, MatchPeriod, StandingEntry, LiveMatchesResult
 } from '../types';
 import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
@@ -79,19 +79,23 @@ class FapiClient {
 
   // ---- Competition & Matches ----
 
-  async getLiveMatches(): Promise<NormalizedMatch[]> {
+  async getLiveMatches(): Promise<LiveMatchesResult> {
     const confirmedLive: NormalizedMatch[] = [];
+    let requestSucceeded = false;
 
     for (const competitionId of this.getCompetitionIds()) {
       try {
         const data = await this.request<any>('GET', `/competitions/${competitionId}/matches`, { live: true }, 10);
+        requestSucceeded = true;
         confirmedLive.push(...this.extractMatches(data).filter(m => this.isReliableLiveMatch(m)));
       } catch {
         // Try the next configured World Cup competition id.
       }
     }
 
-    if (confirmedLive.length > 0) return this.dedupeMatches(confirmedLive);
+    if (confirmedLive.length > 0) {
+      return { matches: this.dedupeMatches(confirmedLive), requestSucceeded };
+    }
 
     const genericAttempts = [
       { path: '/matches/live', params: undefined },
@@ -101,6 +105,7 @@ class FapiClient {
     for (const attempt of genericAttempts) {
       try {
         const data = await this.request<any>('GET', attempt.path, attempt.params, 10);
+        requestSucceeded = true;
         confirmedLive.push(
           ...this.extractMatches(data)
             .filter(m => this.isWorldCupMatch(m))
@@ -111,9 +116,19 @@ class FapiClient {
       }
     }
 
-    if (confirmedLive.length > 0) return this.dedupeMatches(confirmedLive);
+    if (confirmedLive.length > 0) {
+      return { matches: this.dedupeMatches(confirmedLive), requestSucceeded };
+    }
 
-    return this.getTodayMatches().then(m => this.dedupeMatches(m.filter(m2 => this.isReliableLiveMatch(m2))));
+    try {
+      const todayMatches = await this.getTodayMatches();
+      requestSucceeded = true;
+      confirmedLive.push(...todayMatches.filter(match => this.isReliableLiveMatch(match)));
+    } catch {
+      // The earlier live attempts still determine whether this was a confirmed empty result.
+    }
+
+    return { matches: this.dedupeMatches(confirmedLive), requestSucceeded };
   }
 
   async getTodayMatches(): Promise<NormalizedMatch[]> {
@@ -291,8 +306,12 @@ class FapiClient {
       awayScore,
       homeScorePenalty: raw.home_score_penalty ?? raw.homePenScore ?? undefined,
       awayScorePenalty: raw.away_score_penalty ?? raw.awayPenScore ?? undefined,
-      isFinished: raw.is_finished ?? raw.isFinished ?? (status === 'finished'),
-      isInProgress: raw.is_in_progress ?? raw.isInProgress ?? (status === 'in_progress' || status === 'halftime' || status === 'extra_time' || status === 'penalties'),
+      isFinished: this.providerBoolean(raw.is_finished ?? raw.isFinished) || status === 'finished',
+      isInProgress: this.providerBoolean(raw.is_in_progress ?? raw.isInProgress)
+        || status === 'in_progress'
+        || status === 'halftime'
+        || status === 'extra_time'
+        || status === 'penalties',
       venue: raw.venue || raw.stadium || undefined,
       referee: raw.referee || undefined,
     };
@@ -312,8 +331,8 @@ class FapiClient {
 
   private mapStatus(raw: any): MatchStatus {
     // FAPI uses is_finished and is_in_progress booleans + status string
-    if (raw.is_finished || raw.isFinished) return 'finished';
-    if (raw.is_in_progress || raw.isInProgress) {
+    if (this.providerBoolean(raw.is_finished ?? raw.isFinished)) return 'finished';
+    if (this.providerBoolean(raw.is_in_progress ?? raw.isInProgress)) {
       const minute = raw.minute || raw.match_minute || 0;
       if (minute <= 0) return 'in_progress';
       // Detect halftime via period
@@ -508,6 +527,13 @@ class FapiClient {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private providerBoolean(value: unknown): boolean {
+    if (value === true || value === 1) return true;
+    if (typeof value !== 'string') return false;
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
   }
 }
 

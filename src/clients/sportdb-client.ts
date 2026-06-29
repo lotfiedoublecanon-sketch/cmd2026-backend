@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import {
   NormalizedMatch, MatchEvent, TimelineEventType,
   MatchStats, MatchLineups, LineupPlayer,
-  TeamInfo, MatchStatus, StandingEntry
+  TeamInfo, MatchStatus, StandingEntry, LiveMatchesResult
 } from '../types';
 import { readConfigValue, readConfigValueOrDefault } from '../utils/env';
 
@@ -67,7 +67,7 @@ class SportDbClient {
 
   // ---- Matches ----
 
-  async getLiveMatches(): Promise<NormalizedMatch[]> {
+  async getLiveMatches(): Promise<LiveMatchesResult> {
     const today = new Date().toISOString().split('T')[0];
     const paths = [
       '/eventslive.php?s=Soccer',
@@ -79,10 +79,12 @@ class SportDbClient {
     ];
 
     const confirmedLive: NormalizedMatch[] = [];
+    let requestSucceeded = false;
 
     for (const path of paths) {
       try {
         const data = await this.request<any>(path, 10);
+        requestSucceeded = true;
         const events = this.extractEvents(data);
         const matches = events
           .filter((event: any) => this.isWorldCupEvent(event))
@@ -94,7 +96,7 @@ class SportDbClient {
       }
     }
 
-    return this.dedupeMatches(confirmedLive);
+    return { matches: this.dedupeMatches(confirmedLive), requestSucceeded };
   }
 
   async getTodayMatches(): Promise<NormalizedMatch[]> {

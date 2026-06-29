@@ -16,16 +16,20 @@ import { sourceFetcherService } from './services/source-fetcher-service';
 import { serverCache } from './services/server-cache';
 import { BACKEND_VERSION } from './config/version';
 import { hasConfigValue } from './utils/env';
+import { createRateLimiter, isAllowedOrigin } from './middleware/security';
 
 dotenv.config();
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
+app.set('trust proxy', 1);
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+}));
 app.use(morgan('combined'));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 const widgetDirectory = path.join(__dirname, '..', 'web-widget');
 app.use('/widget', express.static(widgetDirectory, { index: 'index.html' }));
@@ -119,16 +123,24 @@ app.get('/training', async (req: Request, res: Response) => {
   res.json(await sourceFetcherService.fetchTraining());
 });
 
-app.use('/ai', aiRoutes);
+app.use('/ai', createRateLimiter({ windowMs: 60_000, maxRequests: 20 }), aiRoutes);
 app.use('/matches', matchesRoutes);
-app.use('/notifications', notificationsRoutes);
+app.use('/notifications', createRateLimiter({ windowMs: 60_000, maxRequests: 30 }), notificationsRoutes);
 app.use('/api/widget', widgetRoutes);
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error:', err?.message || 'Internal server error');
-  res.status(err.status || 500).json({
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599
+    ? err.status
+    : 500;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const errorMessage = isProduction
+    ? (status >= 500 ? 'Internal server error' : 'Request failed')
+    : (err?.message || 'Internal server error');
+
+  console.error(`Request failed (${status}) on ${req.method} ${req.path}`);
+  res.status(status).json({
     success: false,
-    error: err.message || 'Internal server error',
+    error: errorMessage,
     timestamp: new Date().toISOString(),
   });
 });
