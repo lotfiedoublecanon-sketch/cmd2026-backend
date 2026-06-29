@@ -41,7 +41,19 @@ class MergeService {
 
   async getTodayMatches(): Promise<ApiResponse<NormalizedMatch[]>> {
     const cacheKey = `matches:today:${this.dateKey(new Date())}`;
-    return this.withCache(cacheKey, TTL.today, () => this.fetchTodayMatches());
+    const schedule = await this.withCache(cacheKey, TTL.today, () => this.fetchTodayMatches());
+    const live = await this.getLiveMatches();
+
+    if (!live.success || !Array.isArray(live.data) || live.data.length === 0) {
+      return schedule;
+    }
+
+    return {
+      ...this.response(this.overlayLiveMatches(schedule.data, live.data), 'merged'),
+      cache: schedule.cache,
+      cachedAt: schedule.cachedAt,
+      updatedAt: live.updatedAt || schedule.updatedAt || new Date().toISOString(),
+    };
   }
 
   async getUpcomingMatches(days = 7): Promise<ApiResponse<NormalizedMatch[]>> {
@@ -352,6 +364,60 @@ class MergeService {
 
   private dateKey(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private overlayLiveMatches(
+    scheduledMatches: NormalizedMatch[],
+    liveMatches: NormalizedMatch[]
+  ): NormalizedMatch[] {
+    const merged = [...scheduledMatches];
+
+    for (const live of liveMatches) {
+      let index = merged.findIndex((scheduled) => this.sameNamedFixture(scheduled, live));
+
+      if (index < 0) {
+        const kickoffMatches = merged
+          .map((scheduled, candidateIndex) => ({
+            candidateIndex,
+            sameKickoff: this.sameKickoff(scheduled.startDateTimeUtc, live.startDateTimeUtc),
+          }))
+          .filter((candidate) => candidate.sameKickoff);
+
+        if (kickoffMatches.length === 1) index = kickoffMatches[0].candidateIndex;
+      }
+
+      if (index >= 0) merged[index] = live;
+      else merged.push(live);
+    }
+
+    return merged.sort((a, b) => (
+      new Date(a.startDateTimeUtc).getTime() - new Date(b.startDateTimeUtc).getTime()
+    ));
+  }
+
+  private sameNamedFixture(a: NormalizedMatch, b: NormalizedMatch): boolean {
+    const aHome = this.teamKey(a.homeTeam.name);
+    const aAway = this.teamKey(a.awayTeam.name);
+    const bHome = this.teamKey(b.homeTeam.name);
+    const bAway = this.teamKey(b.awayTeam.name);
+    if ([aHome, aAway, bHome, bAway].some((name) => !name || name === 'tbd')) return false;
+    return aHome === bHome && aAway === bAway;
+  }
+
+  private sameKickoff(a: string, b: string): boolean {
+    const aTime = new Date(a).getTime();
+    const bTime = new Date(b).getTime();
+    return Number.isFinite(aTime) && Number.isFinite(bTime)
+      && Math.abs(aTime - bTime) <= 5 * 60_000;
+  }
+
+  private teamKey(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   private fapiAvailable(): boolean {
