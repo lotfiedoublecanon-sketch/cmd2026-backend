@@ -209,7 +209,7 @@ class SourceFetcherService {
         itemCount: 0,
         lastCheck,
         sourceType,
-        error: this.safeError(error),
+        error: 'Source temporairement indisponible',
       };
     }
   }
@@ -222,11 +222,6 @@ class SourceFetcherService {
       lastCheck: new Date().toISOString(),
       sourceType,
     };
-  }
-
-  private safeError(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    return String(error);
   }
 
   private async fetchMediaCategory(category: MediaCategory): Promise<MediaFetchResponse> {
@@ -464,7 +459,7 @@ class SourceFetcherService {
   private safePublicError(error: unknown): string {
     const message = error instanceof AxiosError
       ? `${error.response?.status || 'network'} ${error.message}`
-      : this.safeError(error);
+      : error instanceof Error ? error.message : String(error);
     return message
       .replace(/([?&](?:key|api_key|token|access_token)=)[^&\s]+/gi, '$1[redacted]')
       .replace(/(Bearer\s+)[A-Za-z0-9._-]+/gi, '$1[redacted]');

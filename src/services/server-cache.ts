@@ -76,7 +76,7 @@ class ServerCache {
         updatedAt: new Date(entry.updatedAt).toISOString(),
         expiresAt: new Date(entry.expiresAt).toISOString(),
         expired: entry.expiresAt < now,
-        lastError: this.lastErrors.get(key) || null,
+        lastError: this.publicLastError(key),
       })),
     };
   }
@@ -102,6 +102,11 @@ class ServerCache {
       .replace(/([?&](?:key|api_key|token|access_token)=)[^&\s]+/gi, '$1[redacted]')
       .replace(/(Bearer\s+)[A-Za-z0-9._-]+/gi, '$1[redacted]')
       .replace(/(x-api-key["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]+/gi, '$1[redacted]');
+  }
+
+  private publicLastError(key: string): { occurred: true; at: string } | null {
+    const error = this.lastErrors.get(key);
+    return error ? { occurred: true, at: error.at } : null;
   }
 
   private itemCount(value: unknown): number | null {

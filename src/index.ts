@@ -92,7 +92,7 @@ app.get('/sources', (req: Request, res: Response) => {
   });
 });
 
-app.get('/sources/health', async (req: Request, res: Response) => {
+app.get('/sources/health', createRateLimiter({ windowMs: 60_000, maxRequests: 30 }), async (req: Request, res: Response) => {
   const health = await sourceFetcherService.getSourcesHealth();
   res.json({
     success: true,
