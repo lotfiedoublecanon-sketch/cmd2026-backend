@@ -222,6 +222,8 @@ export interface WidgetMatch {
   minute: number | null;
   kickoff: string | null;
   group: string | null;
+  stage: string | null;
+  venue: string | null;
   sourceUsed: string;
   lastUpdatedAt: string;
   liveDataStatus: WidgetLiveDataStatus;

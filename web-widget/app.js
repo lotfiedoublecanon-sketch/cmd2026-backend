@@ -42,6 +42,16 @@
     period_start: 'Reprise', period_end: 'Fin de période', var_decision: 'Décision VAR',
   };
 
+  const STAGE_LABELS = {
+    'group-stage': 'Phase de groupes',
+    'round-of-32': 'Seizièmes de finale',
+    'round-of-16': 'Huitièmes de finale',
+    quarterfinals: 'Quarts de finale',
+    semifinals: 'Demi-finales',
+    'third-place': 'Match pour la troisième place',
+    final: 'Finale',
+  };
+
   const widget = document.querySelector('.widget');
   const widgetBody = document.querySelector('#widget-body');
   const collapseButton = document.querySelector('#collapse-button');
@@ -53,12 +63,14 @@
   const matchesList = document.querySelector('#matches-list');
   const sourceValue = document.querySelector('#source-value');
   const updatedValue = document.querySelector('#updated-value');
+  const trackedTeams = document.querySelector('#tracked-teams');
 
   let activeView = 'live';
   let timerId = null;
   let controller = null;
   let requestId = 0;
   let lastRequestAt = 0;
+  const trackedTeamMap = new Map();
 
   function textValue(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -141,6 +153,48 @@
     return span;
   }
 
+  function addTrackedTeams(matches) {
+    for (const match of matches) {
+      for (const side of ['home', 'away']) {
+        const name = safeTeamName(match?.[`${side}TeamName`]);
+        const code = textValue(match?.[`${side}TeamCode`])?.toUpperCase();
+        if (!code || code === 'TBD' || name === 'À déterminer') continue;
+        trackedTeamMap.set(code, { code, name });
+      }
+    }
+    renderTrackedTeams();
+  }
+
+  function renderTrackedTeams() {
+    const teams = [...trackedTeamMap.values()].slice(0, 32);
+    if (!teams.length) {
+      const empty = document.createElement('span');
+      empty.className = 'team-strip__loading';
+      empty.textContent = 'Aucune équipe confirmée';
+      trackedTeams.replaceChildren(empty);
+      return;
+    }
+    trackedTeams.replaceChildren(...teams.map((team) => {
+      const chip = document.createElement('span');
+      chip.className = 'team-chip';
+      chip.role = 'listitem';
+      chip.title = team.name;
+      const code = document.createElement('span');
+      code.className = 'team-chip__code';
+      code.textContent = team.code;
+      chip.append(makeFlag(team.code), code);
+      return chip;
+    }));
+  }
+
+  async function loadTrackedTeams() {
+    const results = await Promise.allSettled(Object.values(VIEWS).map((view) => fetchJson(view.endpoint)));
+    for (const result of results) {
+      if (result.status === 'fulfilled') addTrackedTeams(extractMatches(result.value));
+    }
+    if (!trackedTeamMap.size) renderTrackedTeams();
+  }
+
   function safeTeamName(value) {
     const name = textValue(value);
     return !name || /^(TBD|Unknown)$/i.test(name) ? 'À déterminer' : name;
@@ -164,6 +218,24 @@
     return new Intl.DateTimeFormat('fr-FR', {
       weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     }).format(date);
+  }
+
+  function formatTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function formatDay(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' }).format(date);
+  }
+
+  function stageLabel(value) {
+    const stage = textValue(value);
+    if (!stage) return 'Coupe du monde 2026';
+    return STAGE_LABELS[stage.toLowerCase()] || stage;
   }
 
   function matchStatus(match) {
@@ -281,20 +353,24 @@
     article.className = 'match';
     const statusCode = matchStatus(match);
     const isLive = LIVE_STATUSES.has(statusCode);
+    const isUpcoming = activeView === 'upcoming' && statusCode === 'SCHEDULED';
+    const kickoff = firstString(match?.kickoff, match?.startDateTimeUtc, match?.date);
 
     const topline = document.createElement('div');
     topline.className = 'match__topline';
     const competition = document.createElement('span');
     competition.className = 'match__competition';
-    competition.textContent = firstString(match?.competitionName, match?.competition, match?.group, match?.stage) || 'Coupe du monde 2026';
+    competition.textContent = stageLabel(firstString(match?.stage, match?.group, match?.competitionName, match?.competition));
     const date = document.createElement('time');
-    date.textContent = formatDate(firstString(match?.kickoff, match?.startDateTimeUtc, match?.date)) || '—';
+    date.textContent = isUpcoming ? formatDay(kickoff) : (formatDate(kickoff) || '—');
     topline.append(competition, date);
 
     const minute = document.createElement('div');
-    minute.className = 'match__minute';
-    minute.dataset.visible = String(isLive && Number.isFinite(match?.minute));
-    minute.textContent = isLive && Number.isFinite(match?.minute) ? `${match.minute}'` : ' ';
+    minute.className = `match__minute${isUpcoming ? ' match__minute--kickoff' : ''}`;
+    minute.dataset.visible = String((isLive && Number.isFinite(match?.minute)) || isUpcoming);
+    minute.textContent = isUpcoming
+      ? formatTime(kickoff)
+      : isLive && Number.isFinite(match?.minute) ? `${match.minute}'` : ' ';
 
     const scoreline = document.createElement('div');
     scoreline.className = 'match__scoreline';
@@ -303,8 +379,9 @@
     const hasScore = Number.isFinite(match?.homeScore) && Number.isFinite(match?.awayScore);
     const score = document.createElement('strong');
     score.className = 'match__score';
-    score.dataset.available = String(hasScore);
-    score.textContent = hasScore ? `${match.homeScore} : ${match.awayScore}` : '— : —';
+    score.dataset.available = String(hasScore || isUpcoming);
+    score.classList.toggle('match__score--versus', isUpcoming);
+    score.textContent = isUpcoming ? 'VS' : hasScore ? `${match.homeScore} : ${match.awayScore}` : '— : —';
     score.setAttribute('aria-label', hasScore ? `${homeName} ${match.homeScore}, ${awayName} ${match.awayScore}` : 'Score non disponible');
     scoreline.append(
       makeTeam(homeName, match?.homeTeamCode, 'home'),
@@ -315,7 +392,9 @@
     const state = document.createElement('div');
     state.className = 'match__state';
     state.dataset.live = String(isLive);
-    state.textContent = STATUS_LABELS[statusCode] || statusCode;
+    state.textContent = isUpcoming
+      ? `${formatDay(kickoff)} · ${stageLabel(match?.stage || match?.group)}`
+      : STATUS_LABELS[statusCode] || statusCode;
 
     article.append(topline, minute, scoreline);
 
@@ -334,7 +413,7 @@
     article.append(state);
 
     const metadata = [];
-    if (textValue(match?.venue)) metadata.push(match.venue);
+    if (textValue(match?.venue)) metadata.push(`Stade : ${match.venue}`);
     if (textValue(match?.sourceUsed)) metadata.push(`Source : ${match.sourceUsed}`);
     if (formatDate(match?.lastUpdatedAt)) metadata.push(`Mis à jour : ${formatDate(match.lastUpdatedAt)}`);
     if (metadata.length) {
@@ -386,6 +465,7 @@
       if (!response.ok || payload?.success === false) throw new Error('Serveur indisponible');
       if (view !== activeView || currentRequestId !== requestId) return;
       const matches = extractMatches(payload);
+      addTrackedTeams(matches);
       setMetadata(extractMetadata(payload));
       if (matches.length) showMatches(matches);
       else showState('empty', {
@@ -455,5 +535,6 @@
     else scheduleNext(activeView, requestId);
   });
 
+  loadTrackedTeams();
   loadActiveView();
 })();

@@ -29,6 +29,16 @@
       </header>
 
       <div id="widget-body">
+        <section class="team-strip" aria-labelledby="team-strip-title">
+          <div class="team-strip__heading">
+            <h2 id="team-strip-title">Équipes à suivre</h2>
+            <span>Live · aujourd'hui · prochains matchs</span>
+          </div>
+          <div class="team-strip__track" id="tracked-teams" role="list" aria-live="polite">
+            <span class="team-strip__loading">Chargement...</span>
+          </div>
+        </section>
+
         <nav class="tabs" role="tablist" aria-label="Période des matchs">
           <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="matches-panel" data-view="live">Live</button>
           <button class="tab" id="tab-today" type="button" role="tab" aria-selected="false" aria-controls="matches-panel" data-view="today" tabindex="-1">Aujourd'hui</button>

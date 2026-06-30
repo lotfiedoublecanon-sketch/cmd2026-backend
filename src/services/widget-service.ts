@@ -130,6 +130,8 @@ export class WidgetService {
       minute: waiting || unconfirmed ? null : this.nullableNumber(match.minute),
       kickoff: this.validDate(match.startDateTimeUtc),
       group: match.group ? String(match.group) : null,
+      stage: match.stage ? String(match.stage) : null,
+      venue: match.venue ? String(match.venue) : null,
       sourceUsed: match.sourceUsed || match.source || sourceUsed,
       lastUpdatedAt,
       liveDataStatus: waiting ? 'waiting' : this.matchDataStatus(match.status),

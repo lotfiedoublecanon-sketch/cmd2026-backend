@@ -163,7 +163,7 @@ export class EspnLiveClient {
       competitionId: String(raw.league?.id || competition?.league?.id || ESPN_WORLD_CUP_LEAGUE),
       competitionName: String(raw.league?.name || competition?.league?.name || 'FIFA World Cup 2026'),
       seasonName: String(raw.season?.year || '2026'),
-      stage: String(competition?.type?.text || raw.season?.type || ''),
+      stage: String(competition?.type?.text || raw.season?.slug || ''),
       round: competition?.round?.displayName || competition?.round?.number || undefined,
       homeTeam: this.normalizeTeam(homeRaw.team),
       awayTeam: this.normalizeTeam(awayRaw.team),
