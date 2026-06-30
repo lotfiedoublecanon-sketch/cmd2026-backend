@@ -88,6 +88,7 @@ export interface NormalizedMatch {
   awayScore: number | null;
   homeScorePenalty?: number;
   awayScorePenalty?: number;
+  winner?: 'home' | 'away' | 'draw';
   isFinished: boolean;
   isInProgress: boolean;
   venue?: string;
@@ -190,6 +191,8 @@ export type WidgetMatchStatus =
   | 'SCHEDULED'
   | 'LIVE'
   | 'HALF_TIME'
+  | 'EXTRA_TIME'
+  | 'PENALTIES'
   | 'FINISHED'
   | 'POSTPONED'
   | 'CANCELLED'
@@ -212,6 +215,9 @@ export interface WidgetMatch {
   awayTeamCode: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  homePenaltyScore: number | null;
+  awayPenaltyScore: number | null;
+  winnerTeamName: string | null;
   status: WidgetMatchStatus;
   minute: number | null;
   kickoff: string | null;

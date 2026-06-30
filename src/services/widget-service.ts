@@ -4,6 +4,7 @@ import {
   MatchEvent,
   MatchStatus,
   NormalizedMatch,
+  StatCategory,
   WidgetLiveDataStatus,
   WidgetMatch,
   WidgetMatchStatus,
@@ -86,6 +87,20 @@ export class WidgetService {
     };
   }
 
+  async getStats(matchId: string): Promise<WidgetResponse<StatCategory>> {
+    const result = await mergeService.getMatchStats(matchId);
+    const lastUpdatedAt = this.lastUpdatedAt(result);
+    const items = Array.isArray(result.data?.stats) ? result.data.stats : [];
+    return {
+      success: result.success,
+      items,
+      sourceUsed: this.sourceUsed(result),
+      lastUpdatedAt,
+      liveDataStatus: items.length > 0 ? 'available' : 'unavailable',
+      ...(result.error ? { error: result.error } : {}),
+    };
+  }
+
   normalizeMatch(
     match: NormalizedMatch,
     sourceUsed: string,
@@ -98,12 +113,19 @@ export class WidgetService {
 
     return {
       id: String(match.id),
-      homeTeamName: match.homeTeam.name,
-      awayTeamName: match.awayTeam.name,
+      homeTeamName: this.teamName(match.homeTeam.name),
+      awayTeamName: this.teamName(match.awayTeam.name),
       homeTeamCode: this.teamCode(match.homeTeam.threeCharCode, match.homeTeam.shortName),
       awayTeamCode: this.teamCode(match.awayTeam.threeCharCode, match.awayTeam.shortName),
       homeScore: waiting || unconfirmed ? null : this.nullableNumber(match.homeScore),
       awayScore: waiting || unconfirmed ? null : this.nullableNumber(match.awayScore),
+      homePenaltyScore: waiting || unconfirmed ? null : this.nullableNumber(match.homeScorePenalty),
+      awayPenaltyScore: waiting || unconfirmed ? null : this.nullableNumber(match.awayScorePenalty),
+      winnerTeamName: match.winner === 'home'
+        ? this.teamName(match.homeTeam.name)
+        : match.winner === 'away'
+          ? this.teamName(match.awayTeam.name)
+          : null,
       status,
       minute: waiting || unconfirmed ? null : this.nullableNumber(match.minute),
       kickoff: this.validDate(match.startDateTimeUtc),
@@ -156,9 +178,11 @@ export class WidgetService {
   private widgetStatus(status: MatchStatus): WidgetMatchStatus {
     switch (status) {
       case 'in_progress':
-      case 'extra_time':
-      case 'penalties':
         return 'LIVE';
+      case 'extra_time':
+        return 'EXTRA_TIME';
+      case 'penalties':
+        return 'PENALTIES';
       case 'halftime':
         return 'HALF_TIME';
       case 'scheduled':
@@ -203,6 +227,11 @@ export class WidgetService {
     const code = primary || fallback;
     if (!code || code.toUpperCase() === 'TBD') return null;
     return code.toUpperCase();
+  }
+
+  private teamName(value?: string): string {
+    const name = value?.trim();
+    return !name || /^(TBD|Unknown)$/i.test(name) ? 'À déterminer' : name;
   }
 }
 

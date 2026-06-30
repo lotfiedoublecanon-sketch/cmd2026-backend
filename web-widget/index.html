@@ -9,78 +9,33 @@
   </head>
   <body>
     <main class="widget" aria-labelledby="widget-title">
+      <div class="pitch-lines" aria-hidden="true"></div>
       <header class="widget__header">
         <div class="brand" aria-hidden="true">
-          <img src="./logo-cdm2026.png" alt="" width="38" height="38">
+          <img src="./logo-cdm2026.png" alt="" width="42" height="42">
         </div>
         <div class="widget__heading">
           <h1 id="widget-title">CDM 2026 Live</h1>
           <p id="refresh-rate">Actualisation toutes les 15 s</p>
         </div>
         <div class="widget__tools">
-          <button
-            class="icon-button"
-            id="refresh-button"
-            type="button"
-            title="Actualiser"
-            aria-label="Actualiser les résultats"
-          >
-            <span aria-hidden="true">&#8635;</span>
+          <button class="icon-button" id="refresh-button" type="button" title="Actualiser" aria-label="Actualiser les résultats">
+            <span aria-hidden="true">↻</span>
           </button>
-          <button
-            class="icon-button"
-            id="collapse-button"
-            type="button"
-            title="Réduire"
-            aria-label="Réduire le widget"
-            aria-controls="widget-body"
-            aria-expanded="true"
-          >
-            <span aria-hidden="true">&#8722;</span>
+          <button class="icon-button" id="collapse-button" type="button" title="Réduire" aria-label="Réduire le widget" aria-controls="widget-body" aria-expanded="true">
+            <span aria-hidden="true">−</span>
           </button>
         </div>
       </header>
 
       <div id="widget-body">
         <nav class="tabs" role="tablist" aria-label="Période des matchs">
-          <button
-            class="tab"
-            id="tab-live"
-            type="button"
-            role="tab"
-            aria-selected="true"
-            aria-controls="matches-panel"
-            data-view="live"
-          >Live</button>
-          <button
-            class="tab"
-            id="tab-today"
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-controls="matches-panel"
-            data-view="today"
-            tabindex="-1"
-          >Aujourd'hui</button>
-          <button
-            class="tab"
-            id="tab-upcoming"
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-controls="matches-panel"
-            data-view="upcoming"
-            tabindex="-1"
-          >À venir</button>
+          <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="matches-panel" data-view="live">Live</button>
+          <button class="tab" id="tab-today" type="button" role="tab" aria-selected="false" aria-controls="matches-panel" data-view="today" tabindex="-1">Aujourd'hui</button>
+          <button class="tab" id="tab-upcoming" type="button" role="tab" aria-selected="false" aria-controls="matches-panel" data-view="upcoming" tabindex="-1">À venir</button>
         </nav>
 
-        <section
-          class="matches"
-          id="matches-panel"
-          role="tabpanel"
-          aria-labelledby="tab-live"
-          tabindex="0"
-        >
+        <section class="matches" id="matches-panel" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
           <div class="state" id="state-message" role="status" aria-live="polite">
             <span class="spinner" aria-hidden="true"></span>
             <p>Chargement des matchs...</p>
@@ -90,19 +45,12 @@
 
         <footer class="widget__footer">
           <dl class="metadata">
-            <div>
-              <dt>Source</dt>
-              <dd id="source-value">—</dd>
-            </div>
-            <div>
-              <dt>Dernière mise à jour</dt>
-              <dd id="updated-value">—</dd>
-            </div>
+            <div><dt>Source</dt><dd id="source-value">—</dd></div>
+            <div><dt>Dernière mise à jour</dt><dd id="updated-value">—</dd></div>
           </dl>
         </footer>
       </div>
     </main>
-
     <script src="./app.js" defer></script>
   </body>
 </html>

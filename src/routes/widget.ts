@@ -53,6 +53,27 @@ router.get('/events/:matchId', async (req: Request, res: Response): Promise<void
   }
 });
 
+router.get('/stats/:matchId', async (req: Request, res: Response): Promise<void> => {
+  if (!isValidMatchId(req.params.matchId)) {
+    res.status(400).json({
+      success: false,
+      items: [],
+      sourceUsed: 'backend',
+      lastUpdatedAt: new Date().toISOString(),
+      liveDataStatus: 'unavailable',
+      error: 'Identifiant de match invalide',
+    } satisfies WidgetResponse<never>);
+    return;
+  }
+
+  try {
+    res.json(await widgetService.getStats(req.params.matchId));
+  } catch (error) {
+    console.error('[Widget API]', safeError(error));
+    res.status(500).json(errorResponse(error));
+  }
+});
+
 function positiveInteger(value: unknown, fallback: number, maximum: number): number {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;

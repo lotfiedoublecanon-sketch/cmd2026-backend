@@ -30,7 +30,7 @@ import { hasConfigValue } from '../utils/env';
 const TTL = {
   live: 30_000,
   today: 10 * 60_000,
-  upcoming: 6 * 60 * 60_000,
+  upcoming: 5 * 60_000,
   standings: 30 * 60_000,
 };
 
@@ -43,13 +43,16 @@ class MergeService {
     const cacheKey = `matches:today:${this.dateKey(new Date())}`;
     const schedule = await this.withCache(cacheKey, TTL.today, () => this.fetchTodayMatches());
     const live = await this.getLiveMatches();
+    const liveToday = Array.isArray(live.data)
+      ? live.data.filter((match) => this.isParisToday(match.startDateTimeUtc))
+      : [];
 
-    if (!live.success || !Array.isArray(live.data) || live.data.length === 0) {
+    if (!live.success || liveToday.length === 0) {
       return schedule;
     }
 
     return {
-      ...this.response(this.overlayLiveMatches(schedule.data, live.data), 'merged'),
+      ...this.response(this.overlayLiveMatches(schedule.data, liveToday), 'merged'),
       cache: schedule.cache,
       cachedAt: schedule.cachedAt,
       updatedAt: live.updatedAt || schedule.updatedAt || new Date().toISOString(),
@@ -100,6 +103,11 @@ class MergeService {
   }
 
   async getMatchEvents(matchId: string): Promise<ApiResponse<MatchEvent[]>> {
+    if (matchId.startsWith('espn-')) {
+      const events = await espnLiveClient.getMatchEvents(matchId);
+      return this.response(events, 'espn-public');
+    }
+
     if (this.fapiAvailable()) try {
       const events = await fapiClient.getMatchEvents(matchId);
       if (events.length > 0) return this.response(events, 'fapi');
@@ -118,6 +126,13 @@ class MergeService {
   }
 
   async getMatchStats(matchId: string): Promise<ApiResponse<MatchStats | null>> {
+    if (matchId.startsWith('espn-')) {
+      const stats = await espnLiveClient.getMatchStats(matchId);
+      return stats
+        ? this.response(stats, 'espn-public')
+        : { success: true, data: null, source: 'espn-public', sourceUsed: 'espn-public', error: 'Stats not available' };
+    }
+
     if (this.fapiAvailable()) try {
       const stats = await fapiClient.getMatchStats(matchId);
       if (stats) return this.response(stats, 'fapi');
@@ -219,6 +234,13 @@ class MergeService {
     }
 
     try {
+      const espnMatches = await espnLiveClient.getTodayMatches();
+      if (espnMatches.length > 0) return this.response(espnMatches, 'espn-public');
+    } catch (e) {
+      console.warn('[Merge] ESPN public today failed:', this.safeError(e));
+    }
+
+    try {
       const tourMatches = (await worldCup2026TourClient.getToday())
         .map(mapWorldCupTourMatch)
         .filter(Boolean) as NormalizedMatch[];
@@ -264,6 +286,13 @@ class MergeService {
       if (fapiMatches.length > 0) return this.response(fapiMatches, 'fapi');
     } catch (e) {
       console.warn('[Merge] FAPI upcoming failed:', this.safeError(e));
+    }
+
+    try {
+      const espnMatches = await espnLiveClient.getUpcomingMatches(days);
+      if (espnMatches.length > 0) return this.response(espnMatches, 'espn-public');
+    } catch (e) {
+      console.warn('[Merge] ESPN public upcoming failed:', this.safeError(e));
     }
 
     try {
@@ -364,6 +393,18 @@ class MergeService {
 
   private dateKey(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private isParisToday(value: string): boolean {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return false;
+    const format = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return format.format(date) === format.format(new Date());
   }
 
   private overlayLiveMatches(

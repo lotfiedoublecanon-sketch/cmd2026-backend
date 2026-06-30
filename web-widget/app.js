@@ -3,60 +3,45 @@
 
   const RENDER_ORIGIN = 'https://cmd2026-backend-1.onrender.com';
   const isGitHubPages = location.hostname.endsWith('.github.io');
-  const apiEndpoint = (widgetPath) => isGitHubPages
-    ? `${RENDER_ORIGIN}${widgetPath}`
-    : widgetPath;
+  const apiEndpoint = (path) => isGitHubPages ? `${RENDER_ORIGIN}${path}` : path;
 
   const VIEWS = {
-    live: {
-      endpoint: apiEndpoint('/api/widget/live'),
-      interval: 15_000,
-      intervalLabel: '15 s',
-    },
-    today: {
-      endpoint: apiEndpoint('/api/widget/today'),
-      interval: 60_000,
-      intervalLabel: '60 s',
-    },
-    upcoming: {
-      endpoint: apiEndpoint('/api/widget/upcoming?days=60'),
-      interval: 300_000,
-      intervalLabel: '5 min',
-    },
+    live: { endpoint: '/api/widget/live', interval: 15_000, intervalLabel: '15 s' },
+    today: { endpoint: '/api/widget/today', interval: 60_000, intervalLabel: '60 s' },
+    upcoming: { endpoint: '/api/widget/upcoming?days=60', interval: 300_000, intervalLabel: '5 min' },
   };
 
   const STATUS_LABELS = {
-    scheduled: 'Programmé',
     SCHEDULED: 'Programmé',
-    in_progress: 'En direct',
     LIVE: 'En direct',
-    halftime: 'Mi-temps',
     HALF_TIME: 'Mi-temps',
-    extra_time: 'Prolongation',
     EXTRA_TIME: 'Prolongation',
-    penalties: 'Tirs au but',
     PENALTIES: 'Tirs au but',
-    finished: 'Terminé',
     FINISHED: 'Terminé',
-    postponed: 'Reporté',
     POSTPONED: 'Reporté',
-    cancelled: 'Annulé',
     CANCELLED: 'Annulé',
-    unknown: 'Statut inconnu',
     UNKNOWN: 'Statut inconnu',
-    AWAITING_LIVE_DATA: 'Match en attente de données live',
+    AWAITING_LIVE_DATA: 'Données live en attente',
   };
 
-  const LIVE_STATUSES = new Set([
-    'in_progress',
-    'halftime',
-    'extra_time',
-    'penalties',
-    'LIVE',
-    'HALF_TIME',
-    'EXTRA_TIME',
-    'PENALTIES',
-  ]);
+  const LIVE_STATUSES = new Set(['LIVE', 'HALF_TIME', 'EXTRA_TIME', 'PENALTIES']);
+  const COUNTRY_CODES = {
+    ALG: 'DZ', ARG: 'AR', AUS: 'AU', AUT: 'AT', BEL: 'BE', BIH: 'BA', BRA: 'BR',
+    CAN: 'CA', CIV: 'CI', CMR: 'CM', COD: 'CD', COL: 'CO', CPV: 'CV', CRO: 'HR',
+    ECU: 'EC', EGY: 'EG', ENG: 'GB', ESP: 'ES', FRA: 'FR', GER: 'DE', GHA: 'GH',
+    IRN: 'IR', IRQ: 'IQ', ITA: 'IT', JPN: 'JP', JOR: 'JO', KOR: 'KR', MAR: 'MA',
+    MEX: 'MX', NED: 'NL', NOR: 'NO', NZL: 'NZ', PAN: 'PA', PAR: 'PY', POL: 'PL',
+    POR: 'PT', QAT: 'QA', KSA: 'SA', SCO: 'GB', SEN: 'SN', SRB: 'RS', SUI: 'CH',
+    SWE: 'SE', TUN: 'TN', TUR: 'TR', UKR: 'UA', URU: 'UY', USA: 'US', UZB: 'UZ',
+  };
+
+  const EVENT_LABELS = {
+    goal: 'But', own_goal: 'But contre son camp', penalty_goal: 'Penalty',
+    penalty_missed: 'Penalty manqué', yellow_card: 'Carton jaune', red_card: 'Carton rouge',
+    second_yellow_card: 'Second carton jaune', substitution: 'Remplacement',
+    period_start: 'Reprise', period_end: 'Fin de période', var_decision: 'Décision VAR',
+  };
+
   const widget = document.querySelector('.widget');
   const widgetBody = document.querySelector('#widget-body');
   const collapseButton = document.querySelector('#collapse-button');
@@ -75,37 +60,18 @@
   let requestId = 0;
   let lastRequestAt = 0;
 
-  function asNonEmptyString(value) {
+  function textValue(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
   function firstString(...values) {
-    for (const value of values) {
-      const text = asNonEmptyString(value);
-      if (text) return text;
-    }
-    return null;
-  }
-
-  function isAwaitingLiveData(payload) {
-    const data = payload && typeof payload.data === 'object' ? payload.data : null;
-    return [
-      payload?.liveDataStatus === 'waiting' ? 'AWAITING_LIVE_DATA' : null,
-      payload?.status,
-      payload?.state,
-      payload?.code,
-      payload?.error,
-      data?.status,
-      data?.state,
-      data?.code,
-    ].some((value) => value === 'AWAITING_LIVE_DATA');
+    return values.map(textValue).find(Boolean) || null;
   }
 
   function extractMatches(payload) {
     if (Array.isArray(payload?.items)) return payload.items;
     if (Array.isArray(payload?.data)) return payload.data;
     if (Array.isArray(payload?.data?.matches)) return payload.data.matches;
-    if (Array.isArray(payload?.matches)) return payload.matches;
     return [];
   }
 
@@ -113,38 +79,25 @@
     const nested = payload?.data && !Array.isArray(payload.data) ? payload.data : {};
     return {
       source: firstString(payload?.sourceUsed, payload?.source, nested?.sourceUsed, nested?.source),
-      updatedAt: firstString(
-        payload?.lastUpdatedAt,
-        payload?.updatedAt,
-        payload?.cachedAt,
-        nested?.lastUpdatedAt,
-        nested?.updatedAt,
-        nested?.cachedAt,
-      ),
+      updatedAt: firstString(payload?.lastUpdatedAt, payload?.updatedAt, nested?.lastUpdatedAt, nested?.updatedAt),
     };
   }
 
   function setMetadata(metadata = {}) {
     sourceValue.textContent = metadata.source || '—';
     updatedValue.replaceChildren();
-
     if (!metadata.updatedAt) {
       updatedValue.textContent = '—';
       return;
     }
-
     const date = new Date(metadata.updatedAt);
     if (Number.isNaN(date.getTime())) {
       updatedValue.textContent = metadata.updatedAt;
       return;
     }
-
     const time = document.createElement('time');
     time.dateTime = date.toISOString();
-    time.textContent = new Intl.DateTimeFormat('fr-FR', {
-      dateStyle: 'short',
-      timeStyle: 'medium',
-    }).format(date);
+    time.textContent = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }).format(date);
     updatedValue.append(time);
   }
 
@@ -153,18 +106,15 @@
     matchesList.replaceChildren();
     stateMessage.hidden = false;
     stateMessage.replaceChildren();
-
     if (kind === 'loading') {
       const spinner = document.createElement('span');
       spinner.className = 'spinner';
       spinner.setAttribute('aria-hidden', 'true');
       stateMessage.append(spinner);
     }
-
     const text = document.createElement('p');
     text.textContent = message;
     stateMessage.append(text);
-
     if (kind === 'error') {
       const retry = document.createElement('button');
       retry.className = 'state__action';
@@ -175,114 +125,229 @@
     }
   }
 
-  function readTeamName(match, side) {
-    const directName = asNonEmptyString(match?.[`${side}TeamName`]);
-    if (directName) return directName;
-    const team = match?.[`${side}Team`] ?? match?.[side];
-    if (typeof team === 'string') return asNonEmptyString(team);
-    return firstString(team?.name, team?.shortName, team?.threeCharCode);
+  function flagFor(code) {
+    const iso = COUNTRY_CODES[String(code || '').toUpperCase()];
+    if (!iso) return null;
+    return [...iso].map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0))).join('');
   }
 
-  function readScore(value) {
-    return typeof value === 'number' && Number.isFinite(value) ? String(value) : '—';
+  function makeFlag(code) {
+    const span = document.createElement('span');
+    span.className = 'team-flag';
+    const flag = flagFor(code);
+    span.textContent = flag || (textValue(code) || '—');
+    span.dataset.fallback = String(!flag);
+    span.setAttribute('aria-hidden', 'true');
+    return span;
   }
 
-  function statusLabel(status) {
-    return status ? (STATUS_LABELS[status] || status) : '—';
+  function safeTeamName(value) {
+    const name = textValue(value);
+    return !name || /^(TBD|Unknown)$/i.test(name) ? 'À déterminer' : name;
   }
 
-  function formatMatchDate(value) {
+  function makeTeam(name, code, side) {
+    const team = document.createElement('div');
+    team.className = `match__team match__team--${side}`;
+    const label = document.createElement('span');
+    label.className = 'match__team-name';
+    label.textContent = safeTeamName(name);
+    if (side === 'away') team.append(label, makeFlag(code));
+    else team.append(makeFlag(code), label);
+    return team;
+  }
+
+  function formatDate(value) {
     if (!value) return null;
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return asNonEmptyString(value);
+    if (Number.isNaN(date.getTime())) return textValue(value);
     return new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
+      weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     }).format(date);
+  }
+
+  function matchStatus(match) {
+    return firstString(match?.status, match?.state, match?.liveStatus) || 'UNKNOWN';
+  }
+
+  function makeDetailsPanel(match) {
+    const panelElement = document.createElement('section');
+    panelElement.className = 'match-details';
+    panelElement.hidden = true;
+    panelElement.setAttribute('aria-live', 'polite');
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'match__details-button';
+    button.textContent = 'Voir détails';
+    button.setAttribute('aria-expanded', 'false');
+
+    let loaded = false;
+    button.addEventListener('click', async () => {
+      const opening = panelElement.hidden;
+      panelElement.hidden = !opening;
+      button.setAttribute('aria-expanded', String(opening));
+      button.textContent = opening ? 'Masquer les détails' : 'Voir détails';
+      if (!opening || loaded) return;
+      loaded = true;
+      await loadMatchDetails(match, panelElement, button);
+    });
+    return { button, panelElement };
+  }
+
+  async function fetchJson(path) {
+    const response = await fetch(apiEndpoint(path), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    if (!response.ok) throw new Error('Détails indisponibles');
+    return response.json();
+  }
+
+  async function loadMatchDetails(match, container, button) {
+    container.textContent = 'Chargement des détails...';
+    button.disabled = true;
+    try {
+      const id = encodeURIComponent(String(match.id || ''));
+      const [eventsPayload, statsPayload] = await Promise.all([
+        fetchJson(`/api/widget/events/${id}`),
+        fetchJson(`/api/widget/stats/${id}`),
+      ]);
+      const events = extractMatches(eventsPayload);
+      const stats = extractMatches(statsPayload);
+      container.replaceChildren();
+      if (!events.length && !stats.length) {
+        container.textContent = 'Détails non disponibles pour ce match';
+        return;
+      }
+      if (stats.length) container.append(makeStats(stats, match));
+      if (events.length) container.append(makeTimeline(events));
+    } catch {
+      container.textContent = 'Détails non disponibles pour ce match';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function makeStats(stats, match) {
+    const section = document.createElement('div');
+    section.className = 'details__section';
+    const heading = document.createElement('h2');
+    heading.textContent = 'Statistiques';
+    section.append(heading);
+    const table = document.createElement('div');
+    table.className = 'stats-table';
+    const header = document.createElement('div');
+    header.className = 'stats-row stats-row--header';
+    header.append(cell(match.homeTeamCode || 'DOM'), cell('Statistique'), cell(match.awayTeamCode || 'EXT'));
+    table.append(header);
+    for (const stat of stats) {
+      const row = document.createElement('div');
+      row.className = 'stats-row';
+      row.append(cell(stat.home ?? '—'), cell(stat.name || '—'), cell(stat.away ?? '—'));
+      table.append(row);
+    }
+    section.append(table);
+    return section;
+  }
+
+  function cell(value) {
+    const span = document.createElement('span');
+    span.textContent = String(value);
+    return span;
+  }
+
+  function makeTimeline(events) {
+    const section = document.createElement('div');
+    section.className = 'details__section';
+    const heading = document.createElement('h2');
+    heading.textContent = 'Timeline';
+    section.append(heading);
+    const list = document.createElement('ol');
+    list.className = 'timeline';
+    for (const event of events) {
+      const item = document.createElement('li');
+      const minute = document.createElement('strong');
+      minute.textContent = `${Number(event.minute) || 0}'`;
+      const description = document.createElement('span');
+      const label = EVENT_LABELS[event.type] || 'Événement';
+      description.textContent = `${label}${event.playerName ? ` · ${event.playerName}` : ''}`;
+      item.append(minute, description);
+      list.append(item);
+    }
+    section.append(list);
+    return section;
   }
 
   function makeMatchCard(match) {
     const article = document.createElement('article');
     article.className = 'match';
+    const statusCode = matchStatus(match);
+    const isLive = LIVE_STATUSES.has(statusCode);
 
     const topline = document.createElement('div');
     topline.className = 'match__topline';
-
     const competition = document.createElement('span');
     competition.className = 'match__competition';
-    competition.textContent = firstString(
-      match?.competitionName,
-      match?.competition,
-      match?.group,
-      match?.stage,
-    ) || '—';
+    competition.textContent = firstString(match?.competitionName, match?.competition, match?.group, match?.stage) || 'Coupe du monde 2026';
+    const date = document.createElement('time');
+    date.textContent = formatDate(firstString(match?.kickoff, match?.startDateTimeUtc, match?.date)) || '—';
+    topline.append(competition, date);
 
-    const rawStatus = firstString(match?.status, match?.state, match?.liveStatus);
-    const status = document.createElement('span');
-    status.className = 'match__status';
-    status.dataset.live = String(LIVE_STATUSES.has(rawStatus));
-    status.textContent = statusLabel(rawStatus);
-    topline.append(competition, status);
+    const minute = document.createElement('div');
+    minute.className = 'match__minute';
+    minute.dataset.visible = String(isLive && Number.isFinite(match?.minute));
+    minute.textContent = isLive && Number.isFinite(match?.minute) ? `${match.minute}'` : ' ';
 
     const scoreline = document.createElement('div');
     scoreline.className = 'match__scoreline';
-
-    const homeName = readTeamName(match, 'home') || '—';
-    const awayName = readTeamName(match, 'away') || '—';
-    const home = document.createElement('span');
-    home.className = 'match__team';
-    home.textContent = homeName;
-
+    const homeName = safeTeamName(match?.homeTeamName);
+    const awayName = safeTeamName(match?.awayTeamName);
+    const hasScore = Number.isFinite(match?.homeScore) && Number.isFinite(match?.awayScore);
     const score = document.createElement('strong');
     score.className = 'match__score';
-    const hasScore = typeof match?.homeScore === 'number'
-      && Number.isFinite(match.homeScore)
-      && typeof match?.awayScore === 'number'
-      && Number.isFinite(match.awayScore);
-    const homeScore = readScore(match?.homeScore);
-    const awayScore = readScore(match?.awayScore);
     score.dataset.available = String(hasScore);
-    score.textContent = hasScore ? `${homeScore} : ${awayScore}` : 'Score non disponible';
-    score.setAttribute(
-      'aria-label',
-      hasScore
-        ? `Score ${homeName}, ${homeScore}; ${awayName}, ${awayScore}`
-        : 'Score non disponible',
+    score.textContent = hasScore ? `${match.homeScore} : ${match.awayScore}` : '— : —';
+    score.setAttribute('aria-label', hasScore ? `${homeName} ${match.homeScore}, ${awayName} ${match.awayScore}` : 'Score non disponible');
+    scoreline.append(
+      makeTeam(homeName, match?.homeTeamCode, 'home'),
+      score,
+      makeTeam(awayName, match?.awayTeamCode, 'away'),
     );
 
-    const away = document.createElement('span');
-    away.className = 'match__team match__team--away';
-    away.textContent = awayName;
-    scoreline.append(home, score, away);
+    const state = document.createElement('div');
+    state.className = 'match__state';
+    state.dataset.live = String(isLive);
+    state.textContent = STATUS_LABELS[statusCode] || statusCode;
 
-    article.append(topline, scoreline);
+    article.append(topline, minute, scoreline);
 
-    const details = [];
-    const date = formatMatchDate(firstString(
-      match?.kickoff,
-      match?.startDateTimeUtc,
-      match?.startTime,
-      match?.date,
-    ));
-    if (date) details.push(date);
-    if (typeof match?.minute === 'number' && Number.isFinite(match.minute)) details.push(`${match.minute}'`);
-    const venue = firstString(match?.venue);
-    if (venue) details.push(venue);
-    const source = firstString(match?.sourceUsed);
-    if (source) details.push(`Source : ${source}`);
-    const updatedAt = formatMatchDate(match?.lastUpdatedAt);
-    if (updatedAt) details.push(`Mis à jour : ${updatedAt}`);
+    if (Number.isFinite(match?.homePenaltyScore) && Number.isFinite(match?.awayPenaltyScore)) {
+      const penalties = document.createElement('p');
+      penalties.className = 'match__penalties';
+      penalties.textContent = `Tirs au but : ${match.homePenaltyScore} – ${match.awayPenaltyScore}`;
+      article.append(penalties);
+    }
+    if (textValue(match?.winnerTeamName)) {
+      const winner = document.createElement('p');
+      winner.className = 'match__winner';
+      winner.textContent = `Vainqueur : ${match.winnerTeamName}`;
+      article.append(winner);
+    }
+    article.append(state);
 
-    if (details.length) {
+    const metadata = [];
+    if (textValue(match?.venue)) metadata.push(match.venue);
+    if (textValue(match?.sourceUsed)) metadata.push(`Source : ${match.sourceUsed}`);
+    if (formatDate(match?.lastUpdatedAt)) metadata.push(`Mis à jour : ${formatDate(match.lastUpdatedAt)}`);
+    if (metadata.length) {
       const detail = document.createElement('p');
       detail.className = 'match__detail';
-      detail.textContent = details.join(' · ');
+      detail.textContent = metadata.join(' · ');
       article.append(detail);
     }
 
+    if (textValue(match?.id)) {
+      const details = makeDetailsPanel(match);
+      article.append(details.button, details.panelElement);
+    }
     return article;
   }
 
@@ -308,59 +373,33 @@
     const requestController = new AbortController();
     controller = requestController;
     let timedOut = false;
-    const requestTimeoutId = window.setTimeout(() => {
-      timedOut = true;
-      requestController.abort();
-    }, 25_000);
-
+    const timeoutId = window.setTimeout(() => { timedOut = true; requestController.abort(); }, 25_000);
     refreshButton.disabled = true;
     refreshButton.classList.add('is-loading');
     if (!background) showState('loading', 'Chargement des matchs...');
 
     try {
-      const response = await fetch(config.endpoint, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: requestController.signal,
-        cache: 'no-store',
+      const response = await fetch(apiEndpoint(config.endpoint), {
+        headers: { Accept: 'application/json' }, signal: requestController.signal, cache: 'no-store',
       });
-
-      let payload;
-      try {
-        payload = await response.json();
-      } catch {
-        throw new Error('Réponse du serveur illisible.');
-      }
-
-      if (!response.ok || (payload?.success === false && !isAwaitingLiveData(payload))) {
-        throw new Error('Serveur temporairement indisponible');
-      }
-
+      const payload = await response.json();
+      if (!response.ok || payload?.success === false) throw new Error('Serveur indisponible');
       if (view !== activeView || currentRequestId !== requestId) return;
-
-      const metadata = extractMetadata(payload);
       const matches = extractMatches(payload);
-      setMetadata(metadata);
-
-      if (matches.length) {
-        showMatches(matches);
-      } else if (isAwaitingLiveData(payload)) {
-        showState('empty', 'Match en attente de données live');
-      } else {
-        const emptyMessages = {
-          live: 'Aucun match en direct actuellement',
-          today: "Aucun match aujourd'hui",
-          upcoming: 'Aucun match à venir',
-        };
-        showState('empty', emptyMessages[view]);
-      }
+      setMetadata(extractMetadata(payload));
+      if (matches.length) showMatches(matches);
+      else showState('empty', {
+        live: 'Aucun match en direct actuellement',
+        today: "Aucun match aujourd'hui",
+        upcoming: 'Aucun match à venir',
+      }[view]);
     } catch (error) {
       if (error?.name === 'AbortError' && !timedOut) return;
       if (view !== activeView || currentRequestId !== requestId) return;
       setMetadata();
       showState('error', 'Serveur temporairement indisponible');
     } finally {
-      window.clearTimeout(requestTimeoutId);
+      window.clearTimeout(timeoutId);
       if (view === activeView && currentRequestId === requestId) {
         refreshButton.disabled = false;
         refreshButton.classList.remove('is-loading');
@@ -373,13 +412,11 @@
     if (!VIEWS[view]) return;
     activeView = view;
     const selectedTab = tabs.find((tab) => tab.dataset.view === view);
-
     for (const tab of tabs) {
       const selected = tab === selectedTab;
       tab.setAttribute('aria-selected', String(selected));
       tab.tabIndex = selected ? 0 : -1;
     }
-
     panel.setAttribute('aria-labelledby', selectedTab.id);
     refreshRate.textContent = `Actualisation toutes les ${VIEWS[view].intervalLabel}`;
     if (focus) selectedTab.focus();
@@ -391,12 +428,10 @@
     tab.addEventListener('keydown', (event) => {
       const currentIndex = tabs.indexOf(tab);
       let targetIndex = null;
-
       if (event.key === 'ArrowRight') targetIndex = (currentIndex + 1) % tabs.length;
       if (event.key === 'ArrowLeft') targetIndex = (currentIndex - 1 + tabs.length) % tabs.length;
       if (event.key === 'Home') targetIndex = 0;
       if (event.key === 'End') targetIndex = tabs.length - 1;
-
       if (targetIndex !== null) {
         event.preventDefault();
         selectView(tabs[targetIndex].dataset.view, { focus: true });
@@ -405,7 +440,6 @@
   }
 
   refreshButton.addEventListener('click', () => loadActiveView());
-
   collapseButton.addEventListener('click', () => {
     const collapsed = widget.classList.toggle('is-collapsed');
     widgetBody.hidden = collapsed;
@@ -416,17 +450,9 @@
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      window.clearTimeout(timerId);
-      return;
-    }
-
-    const elapsed = Date.now() - lastRequestAt;
-    if (elapsed >= VIEWS[activeView].interval) {
-      loadActiveView({ background: true });
-    } else {
-      scheduleNext(activeView, requestId);
-    }
+    if (document.hidden) return window.clearTimeout(timerId);
+    if (Date.now() - lastRequestAt >= VIEWS[activeView].interval) loadActiveView({ background: true });
+    else scheduleNext(activeView, requestId);
   });
 
   loadActiveView();
