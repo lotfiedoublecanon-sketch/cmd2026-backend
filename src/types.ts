@@ -13,6 +13,12 @@ export type MatchStatus =
   | 'finished'
   | 'postponed'
   | 'cancelled'
+  | 'delayed'
+  | 'kickoff_delayed'
+  | 'weather_delay'
+  | 'suspended'
+  | 'interrupted'
+  | 'awaiting_kickoff'
   | 'unknown';
 
 // ---- Match Period ----
@@ -89,6 +95,9 @@ export interface NormalizedMatch {
   homeScorePenalty?: number;
   awayScorePenalty?: number;
   winner?: 'home' | 'away' | 'draw';
+  newKickoff?: string;
+  delayReason?: string;
+  restartEtaMinutes?: number;
   isFinished: boolean;
   isInProgress: boolean;
   venue?: string;
@@ -196,12 +205,20 @@ export type WidgetMatchStatus =
   | 'FINISHED'
   | 'POSTPONED'
   | 'CANCELLED'
+  | 'DELAYED'
+  | 'KICKOFF_DELAYED'
+  | 'WEATHER_DELAY'
+  | 'SUSPENDED'
+  | 'INTERRUPTED'
+  | 'AWAITING_KICKOFF'
   | 'UNKNOWN'
   | 'AWAITING_LIVE_DATA';
 
 export type WidgetLiveDataStatus =
   | 'live'
   | 'waiting'
+  | 'delayed'
+  | 'suspended'
   | 'scheduled'
   | 'final'
   | 'available'
@@ -221,6 +238,9 @@ export interface WidgetMatch {
   status: WidgetMatchStatus;
   minute: number | null;
   kickoff: string | null;
+  newKickoff: string | null;
+  delayReason: string | null;
+  restartEtaMinutes: number | null;
   group: string | null;
   stage: string | null;
   venue: string | null;

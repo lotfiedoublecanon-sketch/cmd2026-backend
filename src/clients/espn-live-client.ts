@@ -16,6 +16,17 @@ const ESPN_WORLD_CUP_LEAGUE = process.env.ESPN_WORLD_CUP_LEAGUE?.trim()
   || 'fifa.world';
 const ESPN_TIMEOUT = Number.parseInt(process.env.ESPN_TIMEOUT_MS || '8000', 10);
 
+const NON_SCORING_STATUSES = new Set<MatchStatus>([
+  'scheduled',
+  'unknown',
+  'cancelled',
+  'postponed',
+  'delayed',
+  'kickoff_delayed',
+  'weather_delay',
+  'awaiting_kickoff',
+]);
+
 export class EspnLiveClient {
   private readonly client: AxiosInstance;
 
@@ -88,6 +99,33 @@ export class EspnLiveClient {
     }
   }
 
+  async getKnockoutMatches(): Promise<LiveMatchesResult> {
+    try {
+      const events = await this.getScoreboard(
+        new Date('2026-06-28T00:00:00.000Z'),
+        new Date('2026-07-20T00:00:00.000Z')
+      );
+      const knockoutStages = new Set([
+        'round-of-32',
+        'round-of-16',
+        'quarterfinals',
+        'semifinals',
+        '3rd-place-match',
+        'final',
+      ]);
+      const matches = events
+        .map((event: unknown) => this.normalizeMatch(event))
+        .filter((match: NormalizedMatch | null): match is NormalizedMatch => Boolean(match))
+        .filter((match) => knockoutStages.has(match.stage.trim().toLowerCase()))
+        .sort((a, b) => new Date(a.startDateTimeUtc).getTime() - new Date(b.startDateTimeUtc).getTime());
+
+      return { matches: this.dedupe(matches), requestSucceeded: true };
+    } catch (error) {
+      this.warn('knockout', error);
+      return { matches: [], requestSucceeded: false };
+    }
+  }
+
   async getMatchEvents(matchId: string): Promise<MatchEvent[]> {
     try {
       const summary = await this.getSummary(matchId);
@@ -149,12 +187,27 @@ export class EspnLiveClient {
     const statusBlock = raw.status || competition?.status || {};
     const status = this.mapStatus(statusBlock.type, statusBlock.period);
     const live = ['in_progress', 'halftime', 'extra_time', 'penalties'].includes(status);
-    const homeScore = this.score(homeRaw.score);
-    const awayScore = this.score(awayRaw.score);
+    const scoresAllowed = !NON_SCORING_STATUSES.has(status);
+    const homeScore = scoresAllowed ? this.score(homeRaw.score) : null;
+    const awayScore = scoresAllowed ? this.score(awayRaw.score) : null;
     if (live && (homeScore === null || awayScore === null)) return null;
 
-    const homePenaltyScore = this.score(homeRaw.shootoutScore);
-    const awayPenaltyScore = this.score(awayRaw.shootoutScore);
+    const homePenaltyScore = scoresAllowed ? this.score(homeRaw.shootoutScore) : null;
+    const awayPenaltyScore = scoresAllowed ? this.score(awayRaw.shootoutScore) : null;
+    const declaredWinner = homeRaw.winner === true && awayRaw.winner !== true
+      ? 'home'
+      : awayRaw.winner === true && homeRaw.winner !== true ? 'away' : undefined;
+    const winner = this.validatedWinner(
+      status,
+      declaredWinner,
+      homeScore,
+      awayScore,
+      homePenaltyScore,
+      awayPenaltyScore
+    );
+    const newKickoff = this.explicitDate(statusBlock, 'newKickoff');
+    const delayReason = this.explicitText(statusBlock, 'delayReason');
+    const restartEtaMinutes = this.explicitNonNegativeNumber(statusBlock, 'restartEtaMinutes');
 
     return {
       id: `espn-${raw.id}`,
@@ -175,7 +228,10 @@ export class EspnLiveClient {
       awayScore,
       homeScorePenalty: homePenaltyScore ?? undefined,
       awayScorePenalty: awayPenaltyScore ?? undefined,
-      winner: homeRaw.winner === true ? 'home' : awayRaw.winner === true ? 'away' : undefined,
+      winner,
+      newKickoff,
+      delayReason,
+      restartEtaMinutes,
       isFinished: status === 'finished',
       isInProgress: live,
       venue: competition?.venue?.fullName || undefined,
@@ -188,6 +244,20 @@ export class EspnLiveClient {
       .trim()
       .toUpperCase();
     const state = String(type?.state || '').trim().toLowerCase();
+
+    const explicitValues = [type?.name, type?.shortDetail, type?.detail, type?.description]
+      .map((value) => this.statusToken(value))
+      .filter(Boolean);
+    if (explicitValues.some((value) => ['KICKOFF_DELAYED'].includes(value))) {
+      return 'kickoff_delayed';
+    }
+    if (explicitValues.some((value) => ['WEATHER_DELAY', 'RAIN_DELAY'].includes(value))) {
+      return 'weather_delay';
+    }
+    if (explicitValues.includes('SUSPENDED')) return 'suspended';
+    if (explicitValues.includes('INTERRUPTED')) return 'interrupted';
+    if (explicitValues.includes('AWAITING_KICKOFF')) return 'awaiting_kickoff';
+    if (explicitValues.includes('DELAYED')) return 'delayed';
 
     if (state === 'post' || type?.completed === true || name.includes('FINAL')) return 'finished';
     if (name.includes('POSTPON')) return 'postponed';
@@ -204,6 +274,62 @@ export class EspnLiveClient {
     }
     if (state === 'pre') return 'scheduled';
     return 'unknown';
+  }
+
+  private statusToken(value: unknown): string {
+    return String(value || '')
+      .trim()
+      .toUpperCase()
+      .replace(/^STATUS[\s_-]+/, '')
+      .replace(/[\s-]+/g, '_');
+  }
+
+  private explicitValue(statusBlock: any, key: string): unknown {
+    const direct = statusBlock?.[key];
+    return direct !== undefined && direct !== null ? direct : statusBlock?.type?.[key];
+  }
+
+  private explicitDate(statusBlock: any, key: string): string | undefined {
+    const value = this.explicitValue(statusBlock, key);
+    if (typeof value !== 'string' || !value.trim()) return undefined;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+  }
+
+  private explicitText(statusBlock: any, key: string): string | undefined {
+    const value = this.explicitValue(statusBlock, key);
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private explicitNonNegativeNumber(statusBlock: any, key: string): number | undefined {
+    const value = this.explicitValue(statusBlock, key);
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+
+  private validatedWinner(
+    status: MatchStatus,
+    declaredWinner: 'home' | 'away' | undefined,
+    homeScore: number | null,
+    awayScore: number | null,
+    homePenaltyScore: number | null,
+    awayPenaltyScore: number | null
+  ): 'home' | 'away' | undefined {
+    if (status !== 'finished' || !declaredWinner) return undefined;
+
+    if (
+      homePenaltyScore !== null
+      && awayPenaltyScore !== null
+      && homePenaltyScore !== awayPenaltyScore
+    ) {
+      const penaltyWinner = homePenaltyScore > awayPenaltyScore ? 'home' : 'away';
+      return declaredWinner === penaltyWinner ? declaredWinner : undefined;
+    }
+
+    if (homeScore === null || awayScore === null || homeScore === awayScore) return undefined;
+    const regulationWinner = homeScore > awayScore ? 'home' : 'away';
+    return declaredWinner === regulationWinner ? declaredWinner : undefined;
   }
 
   private period(status: MatchStatus, value: unknown) {

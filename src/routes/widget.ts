@@ -1,10 +1,13 @@
 import { Request, Response, Router } from 'express';
+import { bracketService } from '../services/bracket-service';
+import { featuredService } from '../services/featured-service';
+import { groupService } from '../services/group-service';
 import { widgetService } from '../services/widget-service';
 import { WidgetLiveDataStatus, WidgetResponse } from '../types';
 
 const router = Router();
 
-type WidgetHandler = () => Promise<WidgetResponse<unknown>>;
+type WidgetHandler = () => Promise<unknown>;
 
 function send(handler: WidgetHandler) {
   return async (_req: Request, res: Response): Promise<void> => {
@@ -19,6 +22,11 @@ function send(handler: WidgetHandler) {
 
 router.get('/live', send(() => widgetService.getLive()));
 router.get('/today', send(() => widgetService.getToday()));
+router.get('/featured', send(() => featuredService.getFeatured()));
+router.get('/bracket', send(() => bracketService.getBracket()));
+router.get('/knockout', send(() => bracketService.getBracket()));
+router.get('/bracket/status', send(() => bracketService.getStatus()));
+router.get('/groups', send(() => groupService.getGroups()));
 
 router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
   try {

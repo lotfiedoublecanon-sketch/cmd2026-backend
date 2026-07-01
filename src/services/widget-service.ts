@@ -21,6 +21,26 @@ const LIVE_STATUSES = new Set<MatchStatus>([
 
 const UNCONFIRMED_STATUSES = new Set<MatchStatus>(['scheduled', 'unknown']);
 
+const NON_SCORING_STATUSES = new Set<MatchStatus>([
+  'scheduled',
+  'unknown',
+  'cancelled',
+  'postponed',
+  'delayed',
+  'kickoff_delayed',
+  'weather_delay',
+  'awaiting_kickoff',
+]);
+
+const DELAY_STATUSES = new Set<MatchStatus>([
+  'delayed',
+  'kickoff_delayed',
+  'weather_delay',
+  'awaiting_kickoff',
+]);
+
+const SUSPENDED_STATUSES = new Set<MatchStatus>(['suspended', 'interrupted']);
+
 interface MatchNormalizationOptions {
   markPassedKickoffAsWaiting?: boolean;
   now?: Date;
@@ -108,8 +128,9 @@ export class WidgetService {
     options: MatchNormalizationOptions = {}
   ): WidgetMatch {
     const waiting = this.isAwaitingLiveData(match, options);
-    const unconfirmed = UNCONFIRMED_STATUSES.has(match.status);
+    const scoresHidden = waiting || NON_SCORING_STATUSES.has(match.status);
     const status = waiting ? 'AWAITING_LIVE_DATA' : this.widgetStatus(match.status);
+    const winner = this.validatedWinner(match);
 
     return {
       id: String(match.id),
@@ -117,18 +138,21 @@ export class WidgetService {
       awayTeamName: this.teamName(match.awayTeam.name),
       homeTeamCode: this.teamCode(match.homeTeam.threeCharCode, match.homeTeam.shortName),
       awayTeamCode: this.teamCode(match.awayTeam.threeCharCode, match.awayTeam.shortName),
-      homeScore: waiting || unconfirmed ? null : this.nullableNumber(match.homeScore),
-      awayScore: waiting || unconfirmed ? null : this.nullableNumber(match.awayScore),
-      homePenaltyScore: waiting || unconfirmed ? null : this.nullableNumber(match.homeScorePenalty),
-      awayPenaltyScore: waiting || unconfirmed ? null : this.nullableNumber(match.awayScorePenalty),
-      winnerTeamName: match.winner === 'home'
+      homeScore: scoresHidden ? null : this.nullableNumber(match.homeScore),
+      awayScore: scoresHidden ? null : this.nullableNumber(match.awayScore),
+      homePenaltyScore: scoresHidden ? null : this.nullableNumber(match.homeScorePenalty),
+      awayPenaltyScore: scoresHidden ? null : this.nullableNumber(match.awayScorePenalty),
+      winnerTeamName: winner === 'home'
         ? this.teamName(match.homeTeam.name)
-        : match.winner === 'away'
+        : winner === 'away'
           ? this.teamName(match.awayTeam.name)
           : null,
       status,
-      minute: waiting || unconfirmed ? null : this.nullableNumber(match.minute),
+      minute: scoresHidden ? null : this.nullableNumber(match.minute),
       kickoff: this.validDate(match.startDateTimeUtc),
+      newKickoff: this.validDate(match.newKickoff),
+      delayReason: this.nullableText(match.delayReason),
+      restartEtaMinutes: this.nonNegativeNumber(match.restartEtaMinutes),
       group: match.group ? String(match.group) : null,
       stage: match.stage ? String(match.stage) : null,
       venue: match.venue ? String(match.venue) : null,
@@ -172,6 +196,8 @@ export class WidgetService {
 
   private matchDataStatus(status: MatchStatus): WidgetLiveDataStatus {
     if (LIVE_STATUSES.has(status)) return 'live';
+    if (SUSPENDED_STATUSES.has(status)) return 'suspended';
+    if (DELAY_STATUSES.has(status)) return 'delayed';
     if (status === 'finished') return 'final';
     if (status === 'scheduled') return 'scheduled';
     return 'unavailable';
@@ -195,6 +221,18 @@ export class WidgetService {
         return 'POSTPONED';
       case 'cancelled':
         return 'CANCELLED';
+      case 'delayed':
+        return 'DELAYED';
+      case 'kickoff_delayed':
+        return 'KICKOFF_DELAYED';
+      case 'weather_delay':
+        return 'WEATHER_DELAY';
+      case 'suspended':
+        return 'SUSPENDED';
+      case 'interrupted':
+        return 'INTERRUPTED';
+      case 'awaiting_kickoff':
+        return 'AWAITING_KICKOFF';
       default:
         return 'UNKNOWN';
     }
@@ -202,6 +240,8 @@ export class WidgetService {
 
   private responseDataStatus(items: WidgetMatch[]): WidgetLiveDataStatus {
     if (items.some((item) => item.liveDataStatus === 'live')) return 'live';
+    if (items.some((item) => item.liveDataStatus === 'suspended')) return 'suspended';
+    if (items.some((item) => item.liveDataStatus === 'delayed')) return 'delayed';
     if (items.some((item) => item.liveDataStatus === 'waiting')) return 'waiting';
     if (items.some((item) => item.liveDataStatus === 'scheduled')) return 'scheduled';
     if (items.length > 0 && items.every((item) => item.liveDataStatus === 'final')) return 'final';
@@ -220,9 +260,41 @@ export class WidgetService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
-  private validDate(value: string): string | null {
+  private nonNegativeNumber(value: number | null | undefined): number | null {
+    const number = this.nullableNumber(value);
+    return number !== null && number >= 0 ? number : null;
+  }
+
+  private nullableText(value: string | null | undefined): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private validDate(value: string | null | undefined): string | null {
     if (!value) return null;
     return Number.isFinite(new Date(value).getTime()) ? value : null;
+  }
+
+  private validatedWinner(match: NormalizedMatch): 'home' | 'away' | undefined {
+    if (match.status !== 'finished' || (match.winner !== 'home' && match.winner !== 'away')) {
+      return undefined;
+    }
+
+    const homePenaltyScore = this.nullableNumber(match.homeScorePenalty);
+    const awayPenaltyScore = this.nullableNumber(match.awayScorePenalty);
+    if (
+      homePenaltyScore !== null
+      && awayPenaltyScore !== null
+      && homePenaltyScore !== awayPenaltyScore
+    ) {
+      const penaltyWinner = homePenaltyScore > awayPenaltyScore ? 'home' : 'away';
+      return match.winner === penaltyWinner ? match.winner : undefined;
+    }
+
+    const homeScore = this.nullableNumber(match.homeScore);
+    const awayScore = this.nullableNumber(match.awayScore);
+    if (homeScore === null || awayScore === null || homeScore === awayScore) return undefined;
+    const regulationWinner = homeScore > awayScore ? 'home' : 'away';
+    return match.winner === regulationWinner ? match.winner : undefined;
   }
 
   private teamCode(primary?: string, fallback?: string): string | null {
